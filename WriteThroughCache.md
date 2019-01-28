@@ -35,7 +35,7 @@ Coherence == \A p, q \in Proc, a \in Adr :
 
 修改为：
 
-```
+```tla
 
 Coherence == \A p \in Proc, a \in Adr : 
                 (NoVal \neq cache[p][a]) =>
