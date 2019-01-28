@@ -25,6 +25,25 @@
 
 
 
+```tla
+
+Coherence == \A p, q \in Proc, a \in Adr : 
+                (NoVal \notin {cache[p][a], cache[q][a]})
+                      => (cache[p][a]=cache[q][a]) 
+
+```
+
+修改为：
+
+```
+
+Coherence == \A p \in Proc, a \in Adr : 
+                (NoVal \neq cache[p][a]) =>
+                      => (cache[p][a]= wmem[a]) 
+```
+
+
+
 ### 读写Memory不排队
 
 
