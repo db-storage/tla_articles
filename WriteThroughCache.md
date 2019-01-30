@@ -1,19 +1,21 @@
 # WriteThroughCache
 
-## 什么是Write Through
+## 什么是 Write Through Cache
 
-- 简单来说，在Cache的同时，也要写缓存
-- 在一次状态变更中，完成写Cache的同时，产生更新主存的请求(只是请求进入队列，真正写主存，是单独的状态变更)。
+- 简单来说，在Cache的同时，也要写主存
+- 与Write Back相对应，Write Back是先写到Cache，在合适的时候写回主存
+- 在下面要解释的TLA Spec 中，在一次状态变更中，完成写Cache的同时，产生更新主存的请求(只是请求进入队列。而真正的写主存，则由单独的状态变更完成)。
 
 ## 模型
 
 - 多进程
 - 每个进程有自己的Cache
-- Memory的读写操作是顺序的
+- 每个进程最多只有一个待执行的请求(包括读/写)，这个通过ctl[p]的状态来控制
+- 主存的读写操作按照FIFO方式进行
 
 
 
-## 支持的操作
+## 支持的接口
 
 ### 1. Read
 
@@ -23,7 +25,9 @@
 
 - 由于Evict哪个cache项以及什么时候Evict不影响正确性，只影响效率，所以随机选择一个Cache元素去Evict 
 
-## 
+  
+
+
 
 ## Spec分析
 
@@ -58,9 +62,9 @@ vmem  ==
 
 
 
-## 一些思考和改动
+## 
 
-### 改变Write请求进入memQ的位置(Head还是Tail?)
+## 尝试做些改动
 
 ### 改变下Coherence
 
@@ -80,16 +84,22 @@ Coherence == \A p, q \in Proc, a \in Adr :
 
 Coherence == \A p \in Proc, a \in Adr : 
                 (NoVal \neq cache[p][a]) =>
-                      => (cache[p][a]= wmem[a]) 
+                      => (cache[p][a]= vmem[a]) 
 ```
 
 
 
-### 读写Memory不排队
+
+
+### 不读vmem，直接读取wmem
+
+### 每个Process可以有多个并发请求
 
 
 
-### 各个进程的请求分别排队
+## 如何对应到代码实现
+
+### - DoWrite()操作的原子性保证？锁总线
 
 
 
