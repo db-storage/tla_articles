@@ -83,7 +83,8 @@ ASSUME (QLen \in Nat) /\ (QLen > 0)
 #### 请求的集合(取值范围)
 
 ```tla
-(* 请求的取值范围， "Rd"或者"Wr"类型。"Rd"类型的，只需要指定adr，而 "Wr"则还需要指定val *)
+(* 请求的取值范围，"Rd"和"Wr"两种Record的集合。                                    *)
+(* Rd"类型的，只需要指定adr， 而 "Wr"则还需要指定val                                *)
 (* “Rd"类型和"Wr"类型的请求，由于adr可以取Val的不同值，实际上是个集合。"Wr"类型也类似    *)
 (* \cup是并集的意思                                                             *)
 MReq == [op : {"Rd"}, adr: Adr] 
@@ -98,7 +99,8 @@ NoVal == CHOOSE v : v \notin Val
 #### 初始状态
 
 ```tla
-(* wmem中的每个地址对应的值可以是任意的， ctl中每个元素必须是"rdy"，表示可以接受新请求*)
+(* wmem中的每个地址对应的值可以是任意合法值， ctl中每个元素必须是"rdy"，才可接受新请求  *)
+(* 其他的取值为NoVal，表示无效值                                                *)
 Init == /\ wmem \in [Adr->Val]
         /\ ctl = [p \in Proc |-> "rdy"] 
         /\ buf = [p \in Proc |-> NoVal] 
@@ -132,7 +134,7 @@ Coherence == \A p, q \in Proc, a \in Adr :
 
 
 
-#### 对外接收请求和响应
+#### 接收请求和响应的操作
 
 ```
 Req(p) == /\ ctl[p] = "rdy" 
@@ -150,10 +152,12 @@ Rsp(p) == /\ ctl[p] = "done"
 
 
 
-内部处理
+#### 内部处理操作
 
 ```
-(*读操作，缓存未命中*)
+(* 有读请求，且缓存未命中，将读请求放到memQ中                            *)
+(* 前三行都是前提条件，如果都满足，才执行后续的状态变更                    *)
+(* ctl的新旧状态差异，只在于ctl[p]，ctl的其他成员不变                    *)
 RdMiss(p) ==  /\ (ctl[p] = "busy") /\ (buf[p].op = "Rd") 
               /\ cache[p][buf[p].adr] = NoVal 
               /\ Len(memQ) < QLen
@@ -188,6 +192,8 @@ DoWr(p) ==
 
 
 #### vmem
+
+vmem类似于数据库里面的view，它不是一个变量的值，而是要动态产生的值。
 
 ```tla
 (* wmem 是个 Adr -> Val 的Function                                           *)
