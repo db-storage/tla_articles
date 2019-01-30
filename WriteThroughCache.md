@@ -12,6 +12,12 @@
 
 ## 模型
 
+### 图
+
+### 组成部分
+
+
+
 - 多进程
 - 每个进程有自己的Cache
 - 每个进程最多只有一个待执行的请求(包括读/写)，这个通过ctl[p]的状态来控制
@@ -33,24 +39,166 @@
 
   
 
-
-
 ## Spec分析
 
-### Spec组成
+#### 与图中元素对应
 
-### 各个操作的含义解析
+| 图中元素 | spec中变量 | 说明               |
+| -------- | ---------- | ------------------ |
+| 主存     | wmem       | wmem是个function   |
+| ctl      | ctl        | ctl是个function    |
+| buf      | buf        | 是一个function     |
+| cache    | cache      | cache是个 function |
+| Queue    | memQ       | memQ是个Sequence   |
+
+
+
+#### 常量和变量定义
 
 ```tla
-(* wmem is a function,  Adr -> Val                                          *)
-(* f[0] =  wmem, so f[0] is a function:    Adr -> Val                       *)
-(* f is a function,  [0 .. Len(memQ)] -> ([Adr] -> Val)                     *)
-(* vmem == f[Len(memQ)], the LAST ITEM in f,  it's a map: Map[Adr] -> Val   *)
+EXTENDS Naturals, Sequences 
+VARIABLES wmem, ctl, buf, cache, memQ 
+
+CONSTANTS QLen,
+          Proc,  
+           Adr,  
+           Val
+(* 认为QLen必须是大于0的自然数                                          *)
+ASSUME (QLen \in Nat) /\ (QLen > 0)
+```
+
+
+
+其中Qlen, Proc, Adr, Val是常量，需要用户在运行TLC Model Checker前定义。
+
+| 常量 | 意义                                                        |
+| ---- | ----------------------------------------------------------- |
+| QLen | 限定memQ的最大长度，用于减少可能的状态数量                  |
+| Proc | Process的集合，也是ctl, buf等Function的Domain               |
+| Addr | 主存的地址空间，运行model checker时，只需要少量几个空间即可 |
+| Val  | 每个内存地址可能的有效值                                    |
+
+
+
+#### 请求的集合(取值范围)
+
+```tla
+(* 请求的取值范围， "Rd"或者"Wr"类型。"Rd"类型的，只需要指定adr，而 "Wr"则还需要指定val *)
+(* “Rd"类型和"Wr"类型的请求，由于adr可以取Val的不同值，实际上是个集合。"Wr"类型也类似    *)
+(* \cup是并集的意思                                                             *)
+MReq == [op : {"Rd"}, adr: Adr] 
+          \cup [op : {"Wr"}, adr: Adr, val : Val]
+
+(* NoVal是一个不存在的值，类似于NULL/nil的含义                                     *)
+NoVal == CHOOSE v : v \notin Val
+```
+
+
+
+#### 初始状态
+
+```tla
+(* wmem中的每个地址对应的值可以是任意的， ctl中每个元素必须是"rdy"，表示可以接受新请求*)
+Init == /\ wmem \in [Adr->Val]
+        /\ ctl = [p \in Proc |-> "rdy"] 
+        /\ buf = [p \in Proc |-> NoVal] 
+        /\ cache = [p \in Proc |-> [a \in Adr |-> NoVal] ]
+        /\ memQ = << >>  
+```
+
+
+
+#### 不变式
+
+```tla
+(* TypeInv 表示变量的取值，是在合法范围，即：类型是正确的。与前面表格中描述内容一致  *)
+(* 比如，wmem这个function，它的Domain是Adr                                  *)
+(* memQ 是个Sequence，Sequence内部的每个元素，是个二元祖(tuple)               *)
+(* \X表示笛卡尔积，也就是说，元祖的第一元表示取值范围是Proc, 第二元取值范围是MReq   *)
+TypeInvariant == 
+  /\ wmem  \in [Adr -> Val]
+  /\ ctl   \in [Proc -> {"rdy", "busy", "waiting", "done"}] 
+  /\ buf   \in [Proc -> MReq \cup Val \cup {NoVal}]
+  /\ cache \in [Proc -> [Adr -> Val \cup {NoVal}]] 
+  /\ memQ  \in Seq(Proc \X MReq) 
+
+(* Coherence 则关注内容是不是对的，以及变量之间的关系                 *)
+Coherence == \A p, q \in Proc, a \in Adr : 
+                (NoVal \notin {cache[p][a], cache[q][a]})
+                      => (cache[p][a]=cache[q][a]) 
+```
+
+
+
+
+
+#### 对外接收请求和响应
+
+```
+Req(p) == /\ ctl[p] = "rdy" 
+          /\ \E req \in  MReq :
+                /\ buf' = [buf EXCEPT ![p] = req]
+                /\ ctl' = [ctl EXCEPT ![p] = "busy"]
+          /\ UNCHANGED <<cache, memQ, wmem>>  
+
+
+Rsp(p) == /\ ctl[p] = "done"
+          /\ ctl' = [ctl EXCEPT ![p]= "rdy"]
+          /\ UNCHANGED <<cache, memQ, wmem, buf>> 
+ 
+```
+
+
+
+内部处理
+
+```
+(*读操作，缓存未命中*)
+RdMiss(p) ==  /\ (ctl[p] = "busy") /\ (buf[p].op = "Rd") 
+              /\ cache[p][buf[p].adr] = NoVal 
+              /\ Len(memQ) < QLen
+              /\ memQ' = Append(memQ, <<p, buf[p]>>)
+              /\ ctl' = [ctl EXCEPT ![p] = "waiting"]
+              /\ UNCHANGED <<wmem, buf, cache>>
+             
+(*从缓存读*)
+DoRd(p) == 
+  /\ ctl[p] \in {"busy","waiting"} 
+  /\ buf[p].op = "Rd" 
+  /\ cache[p][buf[p].adr] # NoVal
+  /\ buf' = [buf EXCEPT ![p] = cache[p][buf[p].adr]]
+  /\ ctl' = [ctl EXCEPT ![p] = "done"]
+  /\ UNCHANGED <<wmem, cache, memQ>> 
+
+(*写主存*)
+DoWr(p) == 
+  LET r == buf[p]
+  IN  /\ (ctl[p] = "busy") /\ (r.op = "Wr") 
+      /\ Len(memQ) < QLen
+      /\ cache' = [q \in Proc |-> 
+                    IF (p=q)  \/  (cache[q][r.adr]#NoVal)
+                      THEN [cache[q] EXCEPT ![r.adr] = r.val]
+                      ELSE cache[q] ]
+      /\ memQ' = Append(memQ, <<p, r>>)
+      /\ buf' = [buf EXCEPT ![p] = NoVal]
+      /\ ctl' = [ctl EXCEPT ![p] = "done"]
+      /\ UNCHANGED <<wmem>> 
+```
+
+
+
+#### vmem
+
+```tla
+(* wmem 是个 Adr -> Val 的Function                                           *)
+(* f[0] =  wmem, 所以  f[0] 也是一个Adr -> Val 的 Function                    *)
+(* f 是一个 [0 .. Len(memQ)] -> ([Adr] -> Val) 的 Function                   *)
+(* vmem = f[Len(memQ)], 加设memQ有3个元素，那么vmem = f[3]                     *)
 
 (* For i > 0,                                                               *)
 (*     IF memQ[i] is a "Rd", skip it, so f[i] = f[i-1]                      *)
 (*     ELSE f[i] = f[i-1] EXECPT f[i][memQ[i][2].adr] =memQ[i][2].val       *)
-(* Conclusiong: vmem is: wmem + all writes in memQ                          *)
+(* vmem的含义: wmem + memQ中的写请求带来的修改                                  *)
 vmem  ==  
   LET f[i \in 0 .. Len(memQ)] == 
         IF i=0 THEN wmem
@@ -63,12 +211,52 @@ vmem  ==
 
 
 
+#### MemQ操作
+
+```
+MemQWr == LET r == Head(memQ)[2] 
+          IN  /\ (memQ # << >>)  /\   (r.op = "Wr") 
+              /\ wmem' = [wmem EXCEPT ![r.adr] = r.val] 
+              /\ memQ' = Tail(memQ) 
+              /\ UNCHANGED <<buf, ctl, cache>> 
+
+MemQRd == 
+  LET p == Head(memQ)[1] 
+      r == Head(memQ)[2] 
+  IN  /\ (memQ # << >> ) /\ (r.op = "Rd")
+      /\ memQ' = Tail(memQ)
+      /\ cache' = [cache EXCEPT ![p][r.adr] = vmem[r.adr]]
+      /\ UNCHANGED <<wmem, buf, ctl>>  
+```
+
+
+
+```tla
+Evict(p,a) == /\ (ctl[p] = "waiting") => (buf[p].adr # a) 
+              /\ cache' = [cache EXCEPT ![p][a] = NoVal]
+              /\ UNCHANGED <<wmem, buf, ctl, memQ>> 
+```
+
+#### Nex 和 Spec
+
+```
+Next == \/ \E p\in Proc : \/ Req(p) \/ Rsp(p) 
+                          \/ RdMiss(p) \/ DoRd(p) \/ DoWr(p) 
+                          \/ \E a \in Adr : Evict(p, a)
+        \/ MemQWr \/ MemQRd    
+
+Spec == 
+  Init /\ [][Next]_<<wmem, buf, ctl, cache, memQ>>
+```
+
+
+
 ### 为什么需要MemQRd 和 MemQWr？
 
 
 
 
-## 
+
 
 ## 尝试做些改动
 

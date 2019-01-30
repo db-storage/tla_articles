@@ -6,6 +6,7 @@ CONSTANTS QLen,
           Proc,  
            Adr,  
            Val
+
 ASSUME (QLen \in Nat) /\ (QLen > 0)
 --------------------------------------------------------------
 MReq == [op : {"Rd"}, adr: Adr] 
