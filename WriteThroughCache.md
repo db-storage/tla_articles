@@ -1,10 +1,14 @@
 # WriteThroughCache
 
+
+
 ## 什么是 Write Through Cache
 
 - 简单来说，在Cache的同时，也要写主存
 - 与Write Back相对应，Write Back是先写到Cache，在合适的时候写回主存
 - 在下面要解释的TLA Spec 中，在一次状态变更中，完成写Cache的同时，产生更新主存的请求(只是请求进入队列。而真正的写主存，则由单独的状态变更完成)。
+
+
 
 ## 模型
 
@@ -18,6 +22,8 @@
 ## 支持的接口
 
 ### 1. Read
+
+
 
 ### 2. Write
 
