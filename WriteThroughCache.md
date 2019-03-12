@@ -136,7 +136,7 @@ Coherence == \A p, q \in Proc, a \in Adr :
 
 #### 接收请求和响应的操作
 
-```
+```tla
 Req(p) == /\ ctl[p] = "rdy" 
           /\ \E req \in  MReq :
                 /\ buf' = [buf EXCEPT ![p] = req]
@@ -154,7 +154,7 @@ Rsp(p) == /\ ctl[p] = "done"
 
 #### 内部处理操作
 
-```
+```tla
 (* 有读请求，且缓存未命中，将读请求放到memQ中                            *)
 (* 前三行都是前提条件，如果都满足，才执行后续的状态变更                    *)
 (* ctl的新旧状态差异，只在于ctl[p]，ctl的其他成员不变                    *)
@@ -219,7 +219,7 @@ vmem  ==
 
 #### MemQ操作
 
-```
+```tla
 MemQWr == LET r == Head(memQ)[2] 
           IN  /\ (memQ # << >>)  /\   (r.op = "Wr") 
               /\ wmem' = [wmem EXCEPT ![r.adr] = r.val] 
@@ -245,7 +245,7 @@ Evict(p,a) == /\ (ctl[p] = "waiting") => (buf[p].adr # a)
 
 #### Nex 和 Spec
 
-```
+```tla
 Next == \/ \E p\in Proc : \/ Req(p) \/ Rsp(p) 
                           \/ RdMiss(p) \/ DoRd(p) \/ DoWr(p) 
                           \/ \E a \in Adr : Evict(p, a)
