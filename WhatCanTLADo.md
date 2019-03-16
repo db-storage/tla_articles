@@ -1,77 +1,65 @@
+# TLA+能做什么？
 
-#### 我实现了一个基于etcd/consul选主的高可用系统，还是使用了lease机制，我如何确定我设计没有漏洞？会不会出现双主呢？
+TLA+ 是一种形式化描述语言，使用者用TLA+语言描述自己的算法/模型后(这些文件称为specification)，使用TLC Model Checker工具，来验证模型的正确性。
 
-# 为什么需要TLA+
+所谓正确性，实际上包括**Safety和Liveness**两个方面。最重要的是Safety。
 
-
-大部分设计，是围绕功能/接口去展开，比如，Cache模块，我们首先想到的是支持Read/Write/Evict这类接口，然后每个接口对应什么流程/数据结构，哪些地方需要临界区保护等。然后我们会脑补各种并发场景，分析可能存在的corner case，然后设计测试用例，运行测试，找bug。
-
-从实现功能的角度，上述做法很正常。但是如果我们考虑下图的一个Cache模型(暂不支持 Evict)，系统实现后，运行了一段时间测试，Read/Write都很正常，所有测试用例都过了。这时候我仍然会有些疑问：
-
-- 有没有Cache 一致性(Coherency)问题？
-
-- 测试能证明没问题了么？
-
-  
-
-### Cache Coherency的例子
-
-这个问题起码可以对应为两个问题：
-
-- Cache Coherency具体是什么？比如下面两个，是不是看起来都正确？
-
-  > 1. 如果某个进程的Cache里面有地址a1的数据，那么Cache里面的数据与主存中地址a1 对应的数据应该是相同的。
-  > 2. 如果两个进程的Cache里面都有某个地址a1的数据，那么它们应该是相同的。 
-
-- 如何在运行过程中每一个可能的状态都保证Cache Coherency?
-
-  > 我们不可能在实际系统的代码中不断检查Cache Coherency，但是TLA的Model Checker可以。
-
-
-
-### 测试分支覆盖问题
-
-如果把系统运行看出一系列的状态变更，那么问题变成：
-
-- 测试过程中，如何穷举所有可能发生的状态？
-
-  
-
-  
-
-# TLA+能够做什么？
-
-TLA+ 是一种形式化描述语言，使用者用TLA+语言描述自己的算法模型后，使用相应TLC Model Checker工具，来验证模型的正确性。
-
-所谓正确性，实际上包括Safety和Liveness两个方面。最首要的是Safety。
-
-Safety可以认为是系统的设计底线，或者说要保证的内容。例如，对于一个2PC事务，我们要保证的底线：不能有部分参与者认为rollback了，部分认为commit了。至于决策花了多久，各个参与者执行commit/rollback的时间差多少，这是相对次要的问题。
-
-Liveness 是描述系统能够持续运行，比如
-
-
+Safety可以认为是系统要保证的内容，或者说是底线。例如，对于一个2PC事务，我们要保证的底线：不能有部分参与者认为rollback了，部分认为commit了。至于决策花了多久，各个参与者执行commit/rollback的时间相差多少，这是相对次要的问题。
 
 下面举几个例子，说明下Safety和Liveness大致是什么。但是每个模型的Safety和 Liveness都是需要使用者自己定义的。
 
-> 后续我们详细解释liveness时会发现，其实liveness里面还包含了公平性在里面，暂时没想到合适的翻译。所以在文中需用Safety和Liveness两个词
+> 后续我们详细解释liveness时会发现，其实liveness里面还包含了公平性在里面，暂时没想到合适的汉语对应。所以在文中沿用Safety和Liveness两个词。关于Liveness，wiki上有段解释，参见 [这里](https://en.wikipedia.org/wiki/Liveness)。
 
 | 模型                    | Safety                                                       | Liveness                                                     |
 | ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | 分布式事务(2PC)         | 考虑单个事务的执行过程，关于commit还是rollback这个决策，必须是一致的。所有参与者、协调者，不能有部分认为commit了，部分认为rollback了，而且也不能先commit，后rollback。 | 一个事务，最终要么commit，要么rollback，不能一直出于未决状态。 |
-| 读写锁                  | 不能有两个请求者同时获得了写锁                               | 所有请求，无论读写，最终都能满足(不考虑公平性)               |
-| 分布式Key/Value缓存模型 | 如果某节点缓存了某一个key的数据，那么缓存的Value，应该与后端存储是相同的 | 最终每个读请求都能完成                                       |
+| 读写锁                  | 不能有两个请求者同时获得了写锁；不能在有请求者获得了写锁的同时，有请求者获得了读锁。 | 所有请求，无论读写，最终都能满足(不考虑公平性)               |
+| 分布式Key/Value缓存模型 | 如果某节点缓存了某一个key的数据，那么缓存的Value，应该与后端存储是相同的； | 最终每个读请求都能完成                                       |
 
 
 
-用上帝的视角，
+# 常规测试验证存在哪些问题？
+
+1. 很多状态序列在实际系统中出现概率比较低，在短期能没法测试到，而且也不知道是否测试到了没有。尤其是并发导致的大量不同状态序列。
+
+   > 虽然系统是并发的，但是站在全局视角，仍然可以把所有的并发event看成按照发生的顺序组成一个状态序列。
+
+2. 缺乏全局视角和验证手段： 即使在测试过程中所有状态序列都出现了，我们也难以验证是否存在某个状态违背了Safety。比如，考虑上面提到的2PC分布式事务，在实际系统中，如何查看分布在多个节点上的参与者以及协调者，对于事务Commit/Rollback的认识是一致的？
 
 
 
-关于Liveness，wiki上有段解释，参见 [这里](https://en.wikipedia.org/wiki/Liveness)
+以分布式key/value 缓存为例 ：
+
+- 如何确认没有未测试的 Corner Case?
+
+  > 即使系统运行了很久，使用各种单元加系统测试手段，也难以确信没有任何 corner case，因为我们的用例是非常有限的。
+
+- 如何在运行过程中每一个可能的状态都检查Cache Coherency?
+
+  > 从实现的角度，一个分布式系统无法在每一步都去检查Cache Coherency。
 
 
 
-TLA+ 发现了哪些实际问题？
+
+
+# TLA+实际用于哪里了？
+
+以亚马逊的云服务部门AWS为例，原文给出了一些重要模块的使用 TLA+ 进行形式化验证的收获。这篇文章是2014年的，当时AWS的服务比现在少得多。但是我们能看到AWS的一些重量级服务：S3, DynamoDB, EBS。
+
+其中，有不少是利用PlusCal写的。PlusCal是TLA+的语法糖，写起来更简单。PlusCal可以自动转换为TLA+，再进行验证。但是PlusCal不能支持所有的TLA+功能和语法。
+
+| System                             | Components                                               | Line count(excl. comments) | Benefit                                                      |
+| ---------------------------------- | -------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ |
+| S3                                 | Fault-tolerant low-level network algorithm               | 804 PlusCal                | Found 2 bugs. Found further bugs in proposed optimizations.  |
+| S3                                 | Background redistribution of data                        | 645 PlusCal                | Found 1 bug, and found a bug in the first proposed fix.      |
+| DynamoDB                           | Replication & groupmembership system                     | 939 TLA+                   | Found 3 bugs, some requiring traces of 35 steps              |
+| EBS                                | Volume management                                        | 102 PlusCal                | Found 3 bugs.                                                |
+| Internal  distributed lock manager | Lock-free data structure                                 | 223 PlusCal                | Improved confidence. Failed to find a liveness bug as we did not
+check liveness. |
+| Internal  distributed lock manager | Fault tolerant replication and reconfiguration algorithm | 318 TLA+                   | Found 1 bug. Verified an aggressive optimization.            |
+数据来源： [链接](https://lamport.azurewebsites.net/tla/formal-methods-amazon.pdf)
+
+
 
 
 
@@ -92,6 +80,10 @@ TLA+实际上只能用于验证关键算法/模型的正确性，不能用于验
 #### TLA+ 能验证算法的性能么？
 
 不能
+
+
+
+TLA+只能用于验证分布式系统的正确性么？
 
 
 
