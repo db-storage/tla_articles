@@ -303,3 +303,5 @@ Coherence == \A p \in Proc, a \in Adr :
 
 
 
+使用Graphviz来可视化状态变迁
+
