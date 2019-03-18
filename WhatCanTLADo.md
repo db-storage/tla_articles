@@ -54,8 +54,7 @@ Safety可以认为是系统要保证的内容，或者说是底线。例如，�
 | S3                                 | Background redistribution of data                        | 645行 PlusCal              | Found **1 bug,** and found a bug in the first proposed fix.  |
 | DynamoDB                           | Replication & groupmembership system                     | 939 行TLA+                 | Found **3 bugs**, some requiring traces of 35 steps          |
 | EBS                                | Volume management                                        | 102 行PlusCal              | Found **3 bugs**.                                            |
-| Internal  distributed lock manager | Lock-free data structure                                 | 223 行PlusCal              | **Improved confidence**. Failed to find a liveness bug as we did not
-check liveness. |
+| Internal  distributed lock manager | Lock-free data structure                                 | 223 行PlusCal              | Improved confidence. Failed to find a liveness bug as we did not<br/>check liveness. |
 | Internal  distributed lock manager | Fault tolerant replication and reconfiguration algorithm | 318 行 TLA+                | Found **1 bug**. Verified an aggressive optimization.        |
 表格数据来源： [链接](https://lamport.azurewebsites.net/tla/formal-methods-amazon.pdf)
 
@@ -71,30 +70,43 @@ TLC Model Cheker在对spec的正确性验证，大致按照如下方式理解：
 
 - 对每个序列的每个状态，验证是否满足正确性条件(可以认为宇宙暂停运转，上帝查看所有事物(变量)的状态十分满足正确性要求。
 
-在了解TLA+的语法之前，先不写spec，而是用一个简单的伪代码例子来思考下：
+在了解TLA+的语法之前，先不写spec，而是用一个简单代码例子来思考下(这段代码没有什么实际用途)：
 
 ```c
-while(true){
-  //假设语句1和语句2都是单cpu指令，原子执行 
-  语句1; //event1
-  语句2; //event2
-  lock();   //下面三行，整体是原子的，认为是event3
-    语句3;  
-  unlock();
+//假设lock()与unlock()是配对的加锁和解锁函数
+void thread_func(void *p) {
+  int running = 0;
+  while(true) {
+    //atomic step s1，包含下面三行
+    lock();
+    running = gRunning++; //gRunning是全局变量
+    unlock();
+
+    //atomic step s2
+    printf("running:%d", running);
+    //做点其他不操作全局变量的任务，略
+    
+    //atomic step s3， 包含下面三行
+    lock();
+    gRunning--;
+    unlock();
+        
+  }//while(true)
 }
+
 ```
 
-假设有两个线程 (T1, T2)在同时运行上述代码，我们可以认为上述伪代码一共定义了三个event。
+假设有两个线程 (T1, T2)在同时运行上述代码，我们可以认为上述伪代码一共定义了三个原子步骤: s1, s2, s3。
 
-- 在每个线程内部，执行event的顺序是确定的。
+- 在每个线程内部，执行event的顺序是确定的，不断重复s1, s2 和s3。
 
-- 在T1在执行event1和event2之间，T2可能执行了哪些event序列？可以简单列举几个： {1}, {2}, {3}, {1,2}, {2,3}, {3, 1}, {1,2,3}, {1,2, 3,1}...
+- 在T1在执行s1和s2之间，T2可能执行了哪些步骤？假设当前T2到了s1，可以简单列举几个不同的序列： (s1), (s2), (s3), (s1,s2), (s1,s2,s3), (s1,s2, s3), (s1, s2, s3, s1)... 
 
-可以看出，系统可能出现的状态组合非常多。不同的并发执行，产生的结果状态可能是不同的，也可能相同。
+可以看出，如果预先定义的step更多，并发线程更多，那么可能产生的event序列呈指数增长。
 
-TLC Model Checker，从用户定义的初始状态开始，在每一个状态，默认以广度优先方式，搜索可能的下一个event，对于每个不同的event序列进行记录。在计算过程中，为每个状态计算一个Fingerprint。避免对相同的状态重复搜索next。
+TLC Model Checker从用户定义的初始状态开始，在每一个状态，默认以广度优先方式，搜索可能的下一个event，对于每个不同的event序列进行记录，直到所有的event序列都被搜索完成。在计算过程中，为每个状态计算一个Fingerprint，避免对相同的状态重复搜索next。比较 Fingerprint的方式是存在误判的，TLC通过在每次运行中使用不同的seed来解决。
 
-比较 Fingerprint的方式是存在误判的，TLC通过在多次运行中使用不同的随机函数来解决。
+在上面的例子中，如果只考虑两个线程，那么gRunning的取值范围是: [0, 2]，running的取值范围是[1,2]，每个线程即将指向的step也是状态的一部分(s1, s2还是s3)。考虑所有因素，产生的不同状态仍然有限。
 
 
 
@@ -102,9 +114,9 @@ TLC Model Checker，从用户定义的初始状态开始，在每一个状态，
 
 #### 利用TLA+ 验证后的模型，能自动转换成代码么？如何保证代码是正确的？
 
-TLA+实际上只能用于验证关键算法/模型的正确性，不能用于验证完整的系统。一般只在有限规模下验证关键的算法、模型。
+TLA+实际上只能用于验证关键算法/模型的正确性，在model check过程中，可能的状态序列必须在有限时间内验证完成。
 
-TLA+ spec也不能自动转变为代码。
+TLA+ spec不能自动转变为代码。
 
 代码的正确性取决于很多因素，同一个算法，不同的人实现出来也会不同。因此，算法正确性不等于代码正确性。
 
@@ -112,13 +124,11 @@ TLA+ spec也不能自动转变为代码。
 
 #### TLA+ 能验证算法的性能么？
 
-不能，性能不是模型该验证的。
-
-
+不能。
 
 #### TLA+只能用于验证分布式系统的正确性么？
 
-虽然Lamport先生的大量著名研究成果都和分布式相关(例如Paxos, Logical Clock, Latex)，但是TLA+并非分布式系统专用。大部分系统，都可以抽象出数学模型进行验证。
+虽然Lamport先生的大量研究成果都和分布式相关(例如Paxos、Logical Clock、Distributed Snapshot)，但是TLA+并非分布式系统专用。大部分系统，甚至硬件设计，都可以抽象出数学模型进行验证。
 
 
 
