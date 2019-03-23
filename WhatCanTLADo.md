@@ -1,3 +1,7 @@
+---
+typora-copy-images-to: ./Figures
+---
+
 # TLA+能做什么？
 
 TLA+ 是一种形式化描述语言，我们可以用TLA+语言描述自己的算法/模型后(这些文件称为specification)，使用TLC Model Checker工具，来验证模型的正确性。
@@ -79,7 +83,7 @@ TLC Model Cheker在对spec的正确性验证，大致按照如下方式理解：
 void thread_func(void *p) {
   int running = 0;
   while(true) {
-    //atomic step s1
+    //atomic step 0
     lock(); 
     gRunning++; //gRunning是全局变量
     running = gRunning;
@@ -87,7 +91,7 @@ void thread_func(void *p) {
 
     //这里可以执行其他不修改读取running的操作，但是不使用gRunning。先省略。
     
-    //atomic step s2， 包含下面三行
+    //atomic step 1， 包含下面三行
     lock();
     gRunning--;
     running  = gRunning；
@@ -107,11 +111,65 @@ void thread_func(void *p) {
 | 0 (也是最开始状态) | 0       | 0        |
 | 1                  | 1       | 1        |
 
+下篇文章会介绍上述代码转换成TLA+ spec。这里我们先贴一个TLC Model Checker，在进行spec的check后，输出的状态迁移图。蓝色和绿色，分别代表执行step 0和step 1，以及前后状态变化。由于只有单个线程(名字为：A)，实际上非常简单。 
 
 
-TLC Model Checker从用户定义的初始状态开始，在每一个状态，默认以广度优先方式，搜索可能的下一个event，对于每个不同的event序列进行记录，直到所有的event序列都被搜索完成。在计算过程中，为每个状态计算一个Fingerprint，避免对相同的状态重复搜索next。比较 Fingerprint的方式是存在误判的，TLC通过在每次运行中使用不同的seed来解决。
 
-在上面的例子中，如果只考虑两个线程，那么running和gRunning的取值范围是: [0, 2]，每个线程的下一个step也是状态的一部分，取值范围是{s0, s1}。考虑所有因素，产生的不同状态比较有限。
+![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/1thread.jpg)
+
+```tla
+CONSTANTS  ThreadIds
+VARIABLES thread, gRunning
+
+kNumSteps == 2
+tThread == [ next : 0..kNumSteps-1,  running : Nat ]
+
+allVars == <<thread, gRunning>>
+
+NextStep(cur) == (cur + 1) % kNumSteps
+
+Init == 
+  /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
+  /\ gRunning = 0
+
+\* Thread t is at step s
+AtStep(t, s) == thread[t].next = s
+
+AtomicStep0(t) == 
+   LET cur == thread[t].next IN
+     /\ AtStep(t, 0) 
+     /\ gRunning' = gRunning + 1
+     /\ thread' =  [thread EXCEPT ![t] = [next |-> NextStep(cur), running |-> gRunning' ] ]
+
+AtomicStep1(t) == 
+   LET cur == thread[t].next IN
+      /\ AtStep(t, 1)    
+      /\ gRunning' = gRunning - 1
+      /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextStep(cur), running |-> gRunning'] ]    
+   
+Next == 
+  \E  t \in ThreadIds:
+    \/ AtomicStep0(t)
+    \/ AtomicStep1(t)
+
+
+Spec == Init /\ [][Next]_allVars
+
+TypeInv == 
+  /\ thread \in [ ThreadIds ->  tThread ]
+  /\ gRunning \in Nat
+
+StateInv ==
+  /\  gRunning  <= Cardinality(ThreadIds)
+  /\ \A t \in ThreadIds: 
+      /\ thread[t].running <= Cardinality(ThreadIds)
+      /\ thread[t].running <= gRunning
+
+```
+
+TLC Model Checker从用户定义的初始状态开始，在每一个状态，默认以广度优先方式，搜索可能的下一个event，对于每个不同的状态变更序列进行记录，直到所有的序列都被搜索完成。在计算过程中，为每个状态计算一个Fingerprint，避免对相同的状态重复搜索next。比较 Fingerprint的方式是存在误判的，TLC通过在每次运行中使用不同的seed来解决。
+
+在上面的例子中，如果我们定义两个线程A和B，产生多少个状态呢？ 大家可以先思考下，后面给出实际结果。
 
 
 
