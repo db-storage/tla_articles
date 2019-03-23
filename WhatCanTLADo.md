@@ -1,7 +1,3 @@
----
-typora-copy-images-to: ./Figures
----
-
 # TLA+能做什么？
 
 TLA+ 是一种形式化描述语言，我们可以用TLA+语言描述自己的算法/模型后(这些文件称为specification)，使用TLC Model Checker工具，来验证模型的正确性。
@@ -62,6 +58,8 @@ Safety是系统设计者要保证的内容，或者说是底线。例如，对�
 | EBS                                | Volume management                                        | 102 行PlusCal              | Found **3 bugs**.                                            |
 | Internal  distributed lock manager | Lock-free data structure                                 | 223 行PlusCal              | Improved confidence. Failed to find a liveness bug as we did not<br/>check liveness. |
 | Internal  distributed lock manager | Fault tolerant replication and reconfiguration algorithm | 318 行 TLA+                | Found **1 bug**. Verified an aggressive optimization.        |
+
+
 表格数据来源： [链接](https://lamport.azurewebsites.net/tla/formal-methods-amazon.pdf)
 
 
@@ -116,56 +114,6 @@ void thread_func(void *p) {
 
 
 ![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/1thread.jpg)
-
-```tla
-CONSTANTS  ThreadIds
-VARIABLES thread, gRunning
-
-kNumSteps == 2
-tThread == [ next : 0..kNumSteps-1,  running : Nat ]
-
-allVars == <<thread, gRunning>>
-
-NextStep(cur) == (cur + 1) % kNumSteps
-
-Init == 
-  /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
-  /\ gRunning = 0
-
-\* Thread t is at step s
-AtStep(t, s) == thread[t].next = s
-
-AtomicStep0(t) == 
-   LET cur == thread[t].next IN
-     /\ AtStep(t, 0) 
-     /\ gRunning' = gRunning + 1
-     /\ thread' =  [thread EXCEPT ![t] = [next |-> NextStep(cur), running |-> gRunning' ] ]
-
-AtomicStep1(t) == 
-   LET cur == thread[t].next IN
-      /\ AtStep(t, 1)    
-      /\ gRunning' = gRunning - 1
-      /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextStep(cur), running |-> gRunning'] ]    
-   
-Next == 
-  \E  t \in ThreadIds:
-    \/ AtomicStep0(t)
-    \/ AtomicStep1(t)
-
-
-Spec == Init /\ [][Next]_allVars
-
-TypeInv == 
-  /\ thread \in [ ThreadIds ->  tThread ]
-  /\ gRunning \in Nat
-
-StateInv ==
-  /\  gRunning  <= Cardinality(ThreadIds)
-  /\ \A t \in ThreadIds: 
-      /\ thread[t].running <= Cardinality(ThreadIds)
-      /\ thread[t].running <= gRunning
-
-```
 
 TLC Model Checker从用户定义的初始状态开始，在每一个状态，默认以广度优先方式，搜索可能的下一个event，对于每个不同的状态变更序列进行记录，直到所有的序列都被搜索完成。在计算过程中，为每个状态计算一个Fingerprint，避免对相同的状态重复搜索next。比较 Fingerprint的方式是存在误判的，TLC通过在每次运行中使用不同的seed来解决。
 
