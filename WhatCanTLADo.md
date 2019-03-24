@@ -1,12 +1,14 @@
 # TLA+能做什么？
 
-Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种描述语言，它使用单个公式(Formula)来描述系统。但是后来发现单个公式没法描述复杂的工程化系统，于是又发明了TLA+语言。
+Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种形式化描述语言，它使用单个公式(Formula)来描述系统。但是后来发现单个公式没法描述复杂的工程化系统，于是又发明了TLA+语言。
 
-TLA+ 是一种形式化描述语言，我们可以用 TLA+ 语言描述自己的算法/模型(这些文件称为 Specification)。用TLA+写的描述称为Specification，简称为Spec。Spec 形式化地描述系统的合法状态以及在每个状态下可能有哪些行为(Action/Step)。有了 Spec 后，可以使用 TLC Model Checker 这个工具，来验证 Spec 描述的模型的正确性。
+我们可以用 TLA+ 语言描述自己的算法/模型(这些文件称为 Specification)。用TLA+写的描述称为Specification，简称为Spec。Spec 形式化地描述系统的状态以及在每个状态下可能有哪些行为(Action/Step)。有了 Spec 后，可以使用 TLC Model Checker 这个工具，来验证 Spec 描述的模型的正确性。
 
 所谓正确性，实际上包括 **Safety 和 Liveness** 两个方面。其中最重要的是 Safety。
 
-**Safety** 是模型设计者想要保证的内容，或者说是系统的设计底线。例如，在分布式数据库系统中，对于某一个 2PC 事务，要保证的底线可能是：不能有部分参与者认为 Rollback 了，另外一部分认为 Commit 了，或者一个参与者先认为 Commit 了，后来又认为 Rollback 了。**Liveness** 则是指满足条件的 Action 能够被执行，而不是一直原地踏步。
+**Safety** 是模型设计者想要保证的内容，或者说是系统的设计底线。例如，在分布式数据库系统中，对于某一个 2PC 事务，要保证的底线可能是：不能有部分参与者认为 Rollback 了，另外一部分认为 Commit 了，或者一个参与者先认为 Commit 了，后来又认为 Rollback 了。
+
+**Liveness** 则是指满足条件的 Action 能够被执行，而不是一直原地踏步。
 
 下面举几个例子，说明下 Safety 和 Liveness 大致是什么。但是每个模型的 Safety 和  Liveness 都是需要使用者自己定义的，TLA+ 只是提供描述语言，不是模型本身。
 
@@ -75,6 +77,7 @@ TLC Model Cheker 对 Spec的正确性验证过程，可以大致按照如下方�
 
 ```c
 //假设lock()与unlock()是正确实现了的加锁和解锁函数
+
 void thread_func(void *p) {
   int running = 0;
   while(true) {
@@ -95,61 +98,112 @@ void thread_func(void *p) {
 }
 ```
 
-代码中lock()与unlock()之间的临界区代码都可以被认为是一个原子步骤。  上述代码一共定义了两个原子步骤: s0, s1。
+代码中lock()与unlock()之间的临界区代码都可以被认为是一个原子步骤。 上述代码一共定义了两个原子步骤: s0, s1。为了避免对哪些操作是一个atomic step产生疑虑，我们在代码中使用了lock/unlock，虽然这并非必须的。
 
-对于上面的代码，我们可以写出下面的 spec，里面有比较详细的注释。注意这里面增加了 TypeInv 和 StateInv 两个 Safety Property，并且在TLC 中指定要检查这两个属性。
+## 几个简单的常用语法符号
+
+简单说明下，Spec用到的几个常用符号：
+
+| 符号 | 含义                                                         |
+| ---- | ------------------------------------------------------------ |
+| ==   | 右边是左边的定义, Define                                     |
+| \/   | 逻辑运算符 Or，即 \|\|                                       |
+| /\   | 逻辑运算符 And，即&&                                         |
+| \in  | 集合运算中的属于, “a \in S” 表示 a 是 S 的一个元素           |
+| \|-> | 左边的域，映射为右边值，可以简单理解为结构体成员的名称和对应值 |
+| \A   | 任意一个 (for all)                                           |
+| \E   | 存在 (there exists)                                          |
+| [ ]  | 永远成立 (always true)                                       |
+
+
+
+## Spec的组成部分
+
+一个完整的Spec主要包含以下几个Section，后面的例子中，我们用分割线做了分割，可以对应到这几个部分。
+
+| Section                   | 是否为逻辑表达式 | 说明                                                         |
+| ------------------------- | ---------------- | ------------------------------------------------------------ |
+| 常量、变量和辅助操作定义  | 否               |                                                              |
+| 允许出现的Atomic Step定义 | 是               | 一般都定义当前状态需要满足的条件以及 Step 完成后，下一个状态需要满足的条件。这些 Step 会被原子执行。 |
+| 初始状态                  | 是               | 定义初始状态需要满足的条件的逻辑表达式。表达式一般只定义条件，不是具体值。满足条件的初始状态可能是多个。 |
+| 允许的状态变化(Next)      | 是               | 在初始状态后，允许执行哪些 Atomic Step。                     |
+| Spec                      | 是               | 一般为: Init /\ [ ] [Next]_vars 形式。                       |
+| Safety Property           | 是               | 运行中在每个状态需要检查的不变式。                           |
+
+
+
+## 与代码对应的Spec
+
+对于前面的代码，我们可以写出下面的 spec，里面有比较详细的注释。注意有几个地方在代码里面是没有的：
+
+- 为每个线程增加了一个next变量，用于记录线程下一步应该执行的步骤。
+- 增加了 TypeInv 和 StateInv 两个 Safety Property，并且在TLC工具执行时指定了要检查这两个属性。
+
+> 由于这个例子比较特殊，我们描述的是一个循环，所以需要next变量。在后续的很多例子中，往往描述的是更抽象的逻辑，状态是用其他变量描述的，并不需要next变量。
 
 ```tla
 ---------------------------- MODULE ThreadSample ----------------------------
 EXTENDS  Naturals, Sequences, FiniteSets, TLC
-
-CONSTANTS ThreadIds
-VARIABLES thread, gRunning
+---------------------------(*Constants 和 Variables*)------------------------
+(* 运行时，需要在配置中指定 CONSTANT的值，它是一个集合 *)
+CONSTANT ThreadIds
+VARIABLE thread, gRunning
 
 (* 一共只有2个 Step *)
 kNumSteps == 2
-(* 这相当于一个结构体类型定义 *)
-tThread == [ next : 0..kNumSteps-1,  running : Nat ]
+(* tThread类似于一个结构体类型定义, 每个线程有两个局部变量 next 和 running。
+   cursor: 一个游标，表示下一步需要执行的是Step 0 还是 Step 1。
+   next实际上类似于汇编中的esp寄存器
+*)
+tThread == [ next : 0 .. kNumSteps - 1,  running : Nat ]
 (* 所有的变量列表 *)
 allVars == <<thread, gRunning>>
 
-(* Next Step，的变化  *)
-NextStep(cur) == (cur + 1) % kNumSteps
-
-(* 合法的初始状态需要满足的公式： 这里实际上只有一个，每个thread 的running都是0，下一个要执行的步骤都是Step0 *)
-Init == 
-  /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
-  /\ gRunning = 0
+----------------------------(* utility operations *)--------------------------
+(* 取模操作封装，实现step游标的 加1和取模  *)
+NextValue(cur) == 
+  (cur + 1) % kNumSteps
 
 (* 判断线程 t 下一步要执行的是不是 Step s *)
-AtStep(t, s) == thread[t].next = s
+AtStep(t, s) == 
+  thread[t].next = s
 
-(* 线程 t 执行step 0，定义为多个表达式的逻辑与操作:
-   前提条件：next是0 
-   并且 在下一个状态中，gRunning的值是当前值 + 1
-   并且 在下一个状态中，所有thread 中，只有 thread t 的状态有变化，其他不变
+--------------------------------(* 两个Step的定义 *)----------------------------
+(* 线程 t 执行step 0，定义为多个表达式的And:
+   && next是0 
+   && 在下一个状态中，gRunning的值是当前值 + 1
+   && 在下一个状态中，所有thread 中，只有 thread[t] 的状态有变化，其他thread不变
  *)
 AtomicStep0(t) == 
    LET cur == thread[t].next IN
      /\ AtStep(t, 0)  
      /\ gRunning' = gRunning + 1  
-     /\ thread' =  [thread EXCEPT ![t] = [next |-> NextStep(cur), running |-> gRunning' ] ]
+     /\ thread' =  [thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning' ] ]
 
+(* 线程 t 执行step 1，与上面类似 *)
 AtomicStep1(t) == 
    LET cur == thread[t].next IN
-      /\ AtStep(t, 1)    
+      /\ AtStep(t, 1)
       /\ gRunning' = gRunning - 1
-      /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextStep(cur), running |-> gRunning'] ]    
+      /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning'] ]
 
-(* 存在一个线程，能个执行 Step0 或者 Step1 *)   
+------------------------------(* 初始状态的表达式定义 *)------------------------------
+(* 合法的初始状态需要满足的公式： 
+   这里实际上只有一个，每个thread 的running都是0，下一个要执行的步骤都是Step0
+*)
+Init == 
+  /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
+  /\ gRunning = 0
+--------------------------------(* Next操作 *)--------------------------------
+(* 存在一个线程，能个执行 Step0 或者 Step1 *)
 Next == 
   \E  t \in ThreadIds:
     \/ AtomicStep0(t)
     \/ AtomicStep1(t)
 
-(* 初始状态为真，并且总是能执行Next或者allVars不变。allVars不变表示啥也不干 *)
+(* 初始状态为真 && 总是能执行Next或者allVars不变。allVars不变表示原地踏步，啥也不变 *)
 Spec == Init /\ [][Next]_allVars
-
+--------------------------------(* 两个不变式 *)--------------------------------
 (*TypeInv 和 StateInv 是添加的不变式，不对应例子代码中的某个部分 *)
 (* 类型不变式 *)
 TypeInv == 
@@ -164,32 +218,21 @@ StateInv ==
       /\ thread[t].running <= gRunning
 
 =============================================================================
-
 ```
 
 
 
-简单说明下，Spec用到的几个常用符号：
+## 只定义一个Thread ID的 Model Check结果
 
-| 符号 | 含义                   |
-| ---- | ---------------------- |
-| ==   | 右边是左边的定义       |
-| \/   | 逻辑运算符 Or          |
-| /\   | 逻辑运算符 And         |
-| \in  | 集合运算中的属于       |
-| \|-> | 左边的域，映射为右边值 |
-| \A   | 任意一个               |
-| \E   | 存在                   |
-
-## 只有一个线程ID的 Model Check
-
-在运行 TLC Model Checker 时，我们定义ThreadIds = { "A"}，然后执行，可以得到以下的简单状态变更：
+在运行 TLC Model Checker 时，我们配置ThreadIds = { "A"}，即只有一个thread，然后执行，可以得到以下的简单状态变更：
 
 ![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/1thread.jpg)
 
+由于单线程，一共就两个状态，执行 Step 2后，又回到初始状态。各个变量的值变化我们也可以手工对应下。
 
 
-## 两个线程ID 的 Model Check
+
+## 定义两个线程ID 的 Model Check结果
 
 如果我们 ThreadIds = { "A"，"B"}，执行后很快就出现Error，因为 StateInv 不满足。并且明确告知这个错误状态是如何达到的。
 
@@ -203,7 +246,7 @@ StateInv ==
 
 #### 哪里有TLA+的资源？
 
-参见Lamport的[主页](http://lamport.azurewebsites.net/tla/tla.html)。 这里有Lamport写的文档以及相关工具下载。
+参见 Lamport 的[主页](http://lamport.azurewebsites.net/tla/tla.html)。 这实际上就是官网，有文档以及相关工具下载。
 
 
 
