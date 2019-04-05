@@ -1,10 +1,10 @@
-# TLA+能做什么？
+# 1. TLA+能做什么？
 
 Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种形式化描述语言，它使用单个公式(Formula)来描述系统。但是后来发现单个公式没法描述复杂的工程化系统，于是又发明了TLA+语言。
 
 我们可以用 TLA+ 语言描述自己的算法/模型(这些文件称为 Specification)。用TLA+写的描述称为Specification，简称为Spec。Spec 形式化地描述系统的状态以及在每个状态下可能有哪些行为(Action/Step)。有了 Spec 后，可以使用 TLC Model Checker 这个工具，来验证 Spec 描述的模型的正确性。
 
-所谓正确性，实际上包括 **Safety 和 Liveness** 两个方面。其中最重要的是 Safety。
+所谓正确性验证，实际上包括 **Safety 和 Liveness** 两个方面的验证。其中最重要的是 Safety。
 
 **Safety** 是模型设计者想要保证的内容，或者说是系统的设计底线。例如，在分布式数据库系统中，对于某一个 2PC 事务，要保证的底线可能是：不能有部分参与者认为 Rollback 了，另外一部分认为 Commit 了，或者一个参与者先认为 Commit 了，后来又认为 Rollback 了。
 
@@ -12,7 +12,7 @@ Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种形式�
 
 下面举几个例子，说明下 Safety 和 Liveness 大致是什么。但是每个模型的 Safety 和  Liveness 都是需要使用者自己定义的，TLA+ 只是提供描述语言，不是模型本身。
 
-> 后续我们详细解释liveness时会发现，其实liveness里面还包含了公平性在里面，暂时没想到合适的汉语对应。所以在文中沿用Safety和Liveness两个词。关于Liveness，wiki上有段解释，参见 [这里](https://en.wikipedia.org/wiki/Liveness)。
+> 后续我们详细解释liveness时会发现，其实liveness里面还包含了公平性在里面，暂时没想到合适的汉语词汇对应。所以在文中沿用 Safety 和 Liveness 两个词。关于 Liveness，wiki上有段解释，参见 [这里](https://en.wikipedia.org/wiki/Liveness)。
 
 | 模型                    | Safety                                                       | Liveness                                                     |
 | ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -22,7 +22,7 @@ Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种形式�
 
 
 
-# 既然有软件测试，为什么还需要 TLA+ 去验证？
+# 2. 既然有软件测试，为什么还需要 TLA+ 去验证？
 
 虽然软件测试能发现很多问题，但是它不能替代 TLA+。如果我们把一个系统的运行看成一些列的状态变更，那么软件测试存在下面两方面问题：
 
@@ -45,7 +45,7 @@ Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种形式�
 
 
 
-# TLA+ 有啥实际和效果？
+# 3. TLA+ 有啥实际应用和效果？
 
 以亚马逊的云服务部门 AWS 为例，下表给出了一些重要模块的使用 TLA+ 进行形式化验证的收获。这篇文章是2014年的，当时 AWS 的服务比现在少得多，但是我们仍然能看到 AWS 的一些重量级服务：S3, DynamoDB, EBS使用了它进行模型验证。
 
@@ -65,11 +65,11 @@ Temporal Logic of Actions (TLA) 是 Lamport 在1980年代发明的一种形式�
 
 
 
-# TLA+ 是如何进行形式化验证的？
+# 4. TLA+ 是如何进行形式化验证的？
 
 TLC Model Cheker 对 Spec的正确性验证过程，可以大致按照如下方式理解：
 
-- 按照 Spec 描述的初始状态条件，计算初始状态(可能是多个)。
+- 按照 Spec 描述的初始状态条件，计算初始状态(满足初始条件的状态，可能是多个)。
 - 按照深度优先或者广度优先的方式，按照描述的状态变更步骤，得出各种不同的状态，并记录状态变更序列。
 - 对于每个状态，都会验证是否满足 Safety 条件。对于不满足 Safety 条件的状态，给出相应的状态序列。
 
@@ -100,15 +100,16 @@ void thread_func(void *p) {
 
 代码中lock()与unlock()之间的临界区代码都可以被认为是一个原子步骤。 上述代码一共定义了两个原子步骤: s0, s1。为了避免对哪些操作是一个atomic step产生疑虑，我们在代码中使用了lock/unlock，虽然这并非必须的。
 
-## 几个简单的常用语法符号
+## 4.1 几个简单的常用语法符号
 
 简单说明下，Spec用到的几个常用符号：
 
 | 符号 | 含义                                                         |
 | ---- | ------------------------------------------------------------ |
-| ==   | 右边是左边的定义, Define                                     |
-| \/   | 逻辑运算符 Or，即 \|\|                                       |
-| /\   | 逻辑运算符 And，即&&                                         |
+| ==   | 符号的右边是符号左边标识符的定义                             |
+| =    | 逻辑表达式，判断符号两边相等。“a = b” 表示 “a 和 b相等""，**注意不是赋值** |
+| \/   | 逻辑运算符 OR，即 \|\|                                       |
+| /\   | 逻辑运算符 AND，即&&                                         |
 | \in  | 集合运算中的属于, “a \in S” 表示 a 是 S 的一个元素           |
 | \|-> | 左边的域，映射为右边值，可以简单理解为结构体成员的名称和对应值 |
 | \A   | 任意一个 (for all)                                           |
@@ -117,9 +118,11 @@ void thread_func(void *p) {
 
 
 
-## Spec的组成部分
+## 4.2 Spec的组成部分
 
 一个完整的Spec主要包含以下几个Section，后面的例子中，我们用分割线做了分割，可以对应到这几个部分。
+
+Spec中除了一些变量和常量定义，其余内容都是逻辑表达式(值为TRUE/FALSE的式子)。后续会结合实际内容解释这些式子。
 
 | Section                   | 是否为逻辑表达式 | 说明                                                         |
 | ------------------------- | ---------------- | ------------------------------------------------------------ |
@@ -132,7 +135,7 @@ void thread_func(void *p) {
 
 
 
-## 与代码对应的Spec
+## 4.3 与代码对应的Spec
 
 对于前面的代码，我们可以写出下面的 spec，里面有比较详细的注释。注意有几个地方在代码里面是没有的：
 
@@ -152,33 +155,41 @@ VARIABLE thread, gRunning
 (* 一共只有2个 Step *)
 kNumSteps == 2
 (* tThread类似于一个结构体类型定义, 每个线程有两个局部变量 next 和 running。
-   cursor: 一个游标，表示下一步需要执行的是Step 0 还是 Step 1。
-   next实际上类似于汇编中的esp寄存器
+   next 实际上类似于汇编中的eip寄存器，表明下一步执行的语句。
 *)
 tThread == [ next : 0 .. kNumSteps - 1,  running : Nat ]
 (* 所有的变量列表 *)
 allVars == <<thread, gRunning>>
 
 ----------------------------(* utility operations *)--------------------------
-(* 取模操作封装，实现step游标的 加1和取模  *)
+(* 取模操作封装。定义为 先加1 再取模。得到的还是个整数 *)
 NextValue(cur) == 
   (cur + 1) % kNumSteps
 
-(* 判断线程 t 下一步要执行的是不是 Step s *)
+(* 判断线程 t 下一步要执行的等于s，注意 "=" 不是赋值，而是判断两边相等，返回的是TRUE/FALSE *)
 AtStep(t, s) == 
   thread[t].next = s
 
 --------------------------------(* 两个Step的定义 *)----------------------------
-(* 线程 t 执行step 0，定义为多个表达式的And:
-   && next是0 
-   && 在下一个状态中，gRunning的值是当前值 + 1
-   && 在下一个状态中，所有thread 中，只有 thread[t] 的状态有变化，其他thread不变
+(* 注意 带单引号'的式子，表示在下一个状态中，某个变量需要满足的条件。它不是赋值式，而是个逻辑表达式。
+   例如，下面的 "gRunning' = gRunning + 1" 解释为一个返回 TRUE/FALSE 的判断： 
+           在下一个状态中，gRunning的值，等于当前状态中gRunning的值加1
+    如果我们将其理解为赋值操作，那么就不可能与其他表达式进行 && 了。           
+*)
+
+
+(* 下面式子的含义：线程 t 执行step 0。
+   具体定义为多个表达式的逻辑与。只有前面判断条件成立，才会进行满足新条件的状态变更，进入下一个状态。
+   LET 只是个临时变量定义，减少重复书写，没特别意义。LET 下面的三行，含义为：
+   && 前提条件： thread t 的 Next Step 是 0
+   && 下一个状态中，gRunning的值是当前值 + 1
+   && 下一个状态中，所有thread 中，只有 thread[t] 的状态有变化，其他thread不变
  *)
 AtomicStep0(t) == 
    LET cur == thread[t].next IN
      /\ AtStep(t, 0)  
      /\ gRunning' = gRunning + 1  
-     /\ thread' =  [thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning' ] ]
+     /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning' ] ]
 
 (* 线程 t 执行step 1，与上面类似 *)
 AtomicStep1(t) == 
@@ -189,21 +200,23 @@ AtomicStep1(t) ==
 
 ------------------------------(* 初始状态的表达式定义 *)------------------------------
 (* 合法的初始状态需要满足的公式： 
-   这里实际上只有一个，每个thread 的running都是0，下一个要执行的步骤都是Step0
+   这里实际上只有一个状态能满足，即每个thread 的running都是0，下一个要执行的步骤都是Step0
 *)
 Init == 
   /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
   /\ gRunning = 0
---------------------------------(* Next操作 *)--------------------------------
-(* 存在一个线程，能个执行 Step0 或者 Step1 *)
-Next == 
+
+--------------------------------(* Next操作 *)-----------------------------------
+(* 存在一个线程，能执行 Step0 或者 Step1。注意着也是个逻辑表达式 *)
+Next ==
   \E  t \in ThreadIds:
     \/ AtomicStep0(t)
     \/ AtomicStep1(t)
 
-(* 初始状态为真 && 总是能执行Next或者allVars不变。allVars不变表示原地踏步，啥也不变 *)
+(* 初始状态为TRUE && 总是能执行Next或者allVars不变。allVars不变表示原地踏步，啥也不变 *)
 Spec == Init /\ [][Next]_allVars
---------------------------------(* 两个不变式 *)--------------------------------
+
+-----------------------------(* 两个Safety Check *)------------------------------
 (*TypeInv 和 StateInv 是添加的不变式，不对应例子代码中的某个部分 *)
 (* 类型不变式 *)
 TypeInv == 
@@ -222,35 +235,35 @@ StateInv ==
 
 
 
-## 只定义一个Thread ID的 Model Check结果
+## 4.4 只定义一个Thread ID的 Model Check结果
 
-在运行 TLC Model Checker 时，我们配置ThreadIds = { "A"}，即只有一个thread，然后执行，可以得到以下的简单状态变更：
+在运行 TLC Model Checker 时，我们配置ThreadIds = { "A"}，即集合中只有一个thread，然后执行，可以得到以下的简单状态变更：
 
 ![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/1thread.jpg)
 
-由于单线程，一共就两个状态，执行 Step 2后，又回到初始状态。各个变量的值变化我们也可以手工对应下。
+由于单线程，一共就两个状态，执行 Step 2后，又回到初始状态，虽然可以一直运行，但是不同的状态数量就两个。两个状态中，各个变量的值变化我们也可以手工对应下。
 
 
 
-## 定义两个线程ID 的 Model Check结果
+## 4.5 定义两个线程ID 的 Model Check结果
 
-如果我们 ThreadIds = { "A"，"B"}，执行后很快就出现Error，因为 StateInv 不满足。并且明确告知这个错误状态是如何达到的。
+如果我们 ThreadIds = { "A"，"B"}，执行后很快就出现 Error，因为 StateInv 不满足。并且明确告知这个错误状态是如何达到的。
 
 ![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/2thread_err.jpg)
 
-读者可以思考下，为什么这个Error，在单线程模式没有出现，而两个线程就出现了？
+这个错误，实际上是由于Spec中存在bug导致的。读者可以思考下，**为什么这个Error，在配置单线程Check时没有表现出来，而配置两个线程再Check就出现了**？
 
 
 
-# TLA+的一些FAQ
+# 5. TLA+的一些FAQ
 
 #### 哪里有TLA+的资源？
 
-参见 Lamport 的[主页](http://lamport.azurewebsites.net/tla/tla.html)。 这实际上就是官网，有文档以及相关工具下载。
+参见 Lamport 在Microsoft Azure 的[主页](http://lamport.azurewebsites.net/tla/tla.html)。 这实际上就是官网了，有文档以及相关工具下载。
 
 
 
-#### 利用TLA+ 验证后的模型，能自动转换成代码么？如何保证代码是正确的？
+#### 利用TLA+ 验证后的模型，能自动转换成代码么？如何保证对应的代码是正确的？
 
 TLA+实际上只能用于验证关键算法/模型的正确性，在model check过程中，可能的状态序列必须在有限时间内验证完成。
 
@@ -268,7 +281,9 @@ TLA+ spec不能自动转变为代码。
 
 #### TLA+只能用于验证分布式系统的正确性么？
 
-虽然Lamport先生的大量研究成果都和分布式相关(例如Paxos、Logical Clock、Distributed Snapshot)，但是TLA+并非分布式系统专用。大部分系统，甚至硬件设计，都可以抽象出数学模型进行验证。
+否。
+
+虽然 Lamport 的大量研究成果都和分布式相关(例如Paxos、Logical Clock、Distributed Snapshot)，但是TLA+并非分布式系统专用。各类系统设计，包括硬件设计，都可以抽象出数学模型用TLA+描述并进行验证。
 
 
 
