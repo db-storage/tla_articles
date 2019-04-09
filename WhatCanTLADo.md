@@ -104,17 +104,21 @@ void thread_func(void *p) {
 
 简单说明下，Spec用到的几个常用符号：
 
-| 符号 | 含义                                                         |
-| ---- | ------------------------------------------------------------ |
-| ==   | 符号的右边是符号左边标识符的定义                             |
-| =    | 逻辑表达式，判断符号两边相等。“a = b” 表示 “a 和 b相等""，**注意不是赋值** |
-| \/   | 逻辑运算符 OR，即 \|\|                                       |
-| /\   | 逻辑运算符 AND，即&&                                         |
-| \in  | 集合运算中的属于, “a \in S” 表示 a 是 S 的一个元素           |
-| \|-> | 左边的域，映射为右边值，可以简单理解为结构体成员的名称和对应值 |
-| \A   | 任意一个 (for all)                                           |
-| \E   | 存在 (there exists)                                          |
-| [ ]  | 永远成立 (always true)                                       |
+| 符号        | 含义                                                         |
+| ----------- | ------------------------------------------------------------ |
+| ```==```    | 符号的右边是符号左边标识符的定义                             |
+| ```=```     | 逻辑表达式，判断符号两边相等。“a = b” 表示 “a 和 b相等""，**注意不是赋值** |
+| ```\/```    | 逻辑运算符 OR，即 \|\|                                       |
+| ```/\```    | 逻辑运算符 AND，即 &&                                        |
+| ```\in```   | 集合运算中的属于, “a \in S” 表示 a 是 S 的一个元素           |
+| ``` |-> ``` | 左边的域，映射为右边值，可以简单理解为结构体成员的名称和对应值 |
+| ```\A```    | 任意一个 (for all)                                           |
+| ```\E```    | 存在 (there exists)                                          |
+| ```[ ]```   | 恒成立 (always true)                                         |
+
+$$
+
+$$
 
 
 
@@ -130,7 +134,7 @@ Spec中除了一些变量和常量定义，其余内容都是逻辑表达式(值
 | 允许出现的Atomic Step定义 | 是               | 一般都定义当前状态需要满足的条件以及 Step 完成后，下一个状态需要满足的条件。这些 Step 会被原子执行。 |
 | 初始状态                  | 是               | 定义初始状态需要满足的条件的逻辑表达式。表达式一般只定义条件，不是具体值。满足条件的初始状态可能是多个。 |
 | 允许的状态变化(Next)      | 是               | 在初始状态后，允许执行哪些 Atomic Step。                     |
-| Spec                      | 是               | 一般为: Init /\ [ ] [Next]_vars 形式。                       |
+| Spec                      | 是               | 一般为: ```Init /\ [ ] [Next]_vars``` 形式。                 |
 | Safety Property           | 是               | 运行中在每个状态需要检查的不变式。                           |
 
 
@@ -145,42 +149,43 @@ Spec中除了一些变量和常量定义，其余内容都是逻辑表达式(值
 > 由于这个例子比较特殊，我们描述的是一个循环，所以需要next变量。在后续的很多例子中，往往描述的是更抽象的逻辑，状态是用其他变量描述的，并不需要next变量。
 
 ```tla
----------------------------- MODULE ThreadSample ----------------------------
+----------------------- MODULE ThreadSample -----------------------
 EXTENDS  Naturals, Sequences, FiniteSets, TLC
----------------------------(*Constants 和 Variables*)------------------------
+----------------------(*Constants 和 Variables*)-------------------
 (* 运行时，需要在配置中指定 CONSTANT的值，它是一个集合 *)
 CONSTANT ThreadIds
 VARIABLE thread, gRunning
 
 (* 一共只有2个 Step *)
 kNumSteps == 2
-(* tThread类似于一个结构体类型定义, 每个线程有两个局部变量 next 和 running。
+(* tThread类似于一个结构体类型定义, 每线程有两个变量：next 和 running。
    next 实际上类似于汇编中的eip寄存器，表明下一步执行的语句。
 *)
 tThread == [ next : 0 .. kNumSteps - 1,  running : Nat ]
 (* 所有的变量列表 *)
 allVars == <<thread, gRunning>>
 
-----------------------------(* utility operations *)--------------------------
+-----------------------(* utility operations *)---------------------
 (* 取模操作封装。定义为 先加1 再取模。得到的还是个整数 *)
 NextValue(cur) == 
   (cur + 1) % kNumSteps
 
-(* 判断线程 t 下一步要执行的等于s，注意 "=" 不是赋值，而是判断两边相等，返回的是TRUE/FALSE *)
+(* 判断线程 t 下一步要执行的等于s，注意 "=" 不是赋值，而是判断两边相等 *)
 AtStep(t, s) == 
   thread[t].next = s
 
---------------------------------(* 两个Step的定义 *)----------------------------
-(* 注意 带单引号'的式子，表示在下一个状态中，某个变量需要满足的条件。它不是赋值式，而是个逻辑表达式。
-   例如，下面的 "gRunning' = gRunning + 1" 解释为一个返回 TRUE/FALSE 的判断： 
+---------------------------(* 两个Step的定义 *)-----------------------
+(* 注意 带单引号'的变量，表示在下一个状态中，该变量需要满足的条件。
+   它不是赋值式，而是个逻辑表达式。
+   例如，下面的 "gRunning' = gRunning + 1" 解释为： 
            在下一个状态中，gRunning的值，等于当前状态中gRunning的值加1
-    如果我们将其理解为赋值操作，那么就不可能与其他表达式进行 && 了。           
+    如果我们将其理解为赋值操作，那么就不可能与其他表达式做 && 运算了。           
 *)
 
 
 (* 下面式子的含义：线程 t 执行step 0。
-   具体定义为多个表达式的逻辑与。只有前面判断条件成立，才会进行满足新条件的状态变更，进入下一个状态。
-   LET 只是个临时变量定义，减少重复书写，没特别意义。LET 下面的三行，含义为：
+   具体定义为多个表达式的逻辑与。只有前面判断条件成立，才会进入下一个状态。
+   LET 只是个临时变量定义，减少重复书写，没特别意义。LET 后面的三行，含义为：
    && 前提条件： thread t 的 Next Step 是 0
    && 下一个状态中，gRunning的值是当前值 + 1
    && 下一个状态中，所有thread 中，只有 thread[t] 的状态有变化，其他thread不变
@@ -189,35 +194,37 @@ AtomicStep0(t) ==
    LET cur == thread[t].next IN
      /\ AtStep(t, 0)  
      /\ gRunning' = gRunning + 1  
-     /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning' ] ]
+     /\ thread' =  
+       [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning' ] ]
 
 (* 线程 t 执行step 1，与上面类似 *)
 AtomicStep1(t) == 
    LET cur == thread[t].next IN
       /\ AtStep(t, 1)
       /\ gRunning' = gRunning - 1
-      /\ thread' =  [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning'] ]
+      /\ thread' =  
+         [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning'] ]
 
-------------------------------(* 初始状态的表达式定义 *)------------------------------
-(* 合法的初始状态需要满足的公式： 
-   这里实际上只有一个状态能满足，即每个thread 的running都是0，下一个要执行的步骤都是Step0
+-------------------------(* 初始状态的表达式定义 *)-------------------------
+(* 合法的初始状态需要满足的公式。实际上只有一个状态能满足，即每个thread 的running
+   都是0，下一个要执行的步骤都是Step0
 *)
 Init == 
   /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
   /\ gRunning = 0
 
---------------------------------(* Next操作 *)-----------------------------------
+-----------------------------(* Next操作 *)--------------------------------
 (* 存在一个线程，能执行 Step0 或者 Step1。注意着也是个逻辑表达式 *)
 Next ==
   \E  t \in ThreadIds:
     \/ AtomicStep0(t)
     \/ AtomicStep1(t)
 
-(* 初始状态为TRUE && 总是能执行Next或者allVars不变。allVars不变表示原地踏步，啥也不变 *)
+(* 初始状态为TRUE && 总是能执行Next或者保持不变。_allVars是个特殊写法 *)
 Spec == Init /\ [][Next]_allVars
 
------------------------------(* 两个Safety Check *)------------------------------
-(*TypeInv 和 StateInv 是添加的不变式，不对应例子代码中的某个部分 *)
+---------------------------(* 两个Safety Check *)----------------- --------
+(* TypeInv 和 StateInv 是添加的不变式，不具体对应例子代码中的某个部分 *)
 (* 类型不变式 *)
 TypeInv == 
   /\ thread \in [ ThreadIds ->  tThread ]
@@ -235,7 +242,7 @@ StateInv ==
 
 
 
-## 4.4 只定义一个Thread ID的 Model Check结果
+## 4.4 配置单个Thread ID，执行 Model Check结果
 
 在运行 TLC Model Checker 时，我们配置ThreadIds = { "A"}，即集合中只有一个thread，然后执行，可以得到以下的简单状态变更：
 
@@ -245,9 +252,9 @@ StateInv ==
 
 
 
-## 4.5 定义两个线程ID 的 Model Check结果
+## 4.5 配置两个Thread ID，执行 Model Check 结果
 
-如果我们 ThreadIds = { "A"，"B"}，执行后很快就出现 Error，因为 StateInv 不满足。并且明确告知这个错误状态是如何达到的。
+如果配置 ThreadIds = { "A"，"B"}，执行后很快就出现 Error，因为 StateInv 不满足。并且明确告知这个错误状态是如何达到的。
 
 ![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/2thread_err.jpg)
 
