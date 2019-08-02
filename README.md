@@ -1,8 +1,12 @@
 # tla_articls
 
-## 状态机在心里
+## 状态机是核心
 -  准确描述算法，最可行的是用状态机
 > The practical way to precisely describe algorithms is with state machines.来自 [If You’re Not Writing a Program, Don’t Use a Programming Language](http://bulletin.eatcs.org/index.php/beatcs/article/view/539/532)
+
+## 此状态机非彼状态机
+- 整个算法/系统是一个状态机，而不是某个进程是个状态机。
+- 状态机的状态变化需要符合Properity约束
 
 ## State vs Behaviour
 ## Behaviour
