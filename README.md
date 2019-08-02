@@ -34,3 +34,7 @@
 ## TLA+ spec这么复杂，我的代码上万行，怎么验证？
 - TLA+主要验证重要算法和模型，尤其是那些需要上帝视角的算法；
 - 并发是典型的适合用TLA+做验证的，但是其他算法也可以。
+
+## Stuttering Steps
+- 考虑一个只有Hour和Minute的clock(AlgHM)，它作为有Hour,Minute，Second的Clock(AlgHMS)的Refine, AlgHMS可能只修改了second，那么对于AlgHM来说，就是个Stuttering step，它必须允许自己看到的Hour和Minute都不变。(以下来自 [If You’re Not Writing a Program, Don’t Use a Programming Language](http://bulletin.eatcs.org/index.php/beatcs/article/view/539/532))
+> Steps allowed by AlgHMS that change only sec are stuttering steps of AlgHM , allowed by the next-state predicate (17). Therefore, AlgHMS will imply AlgHM. 
