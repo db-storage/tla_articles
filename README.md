@@ -1,16 +1,21 @@
 # tla_articls
 
 ## 状态机是核心
--  准确描述算法，最可行的是用状态机
+-  想要准确描述算法，最可行的是用状态机
 > The practical way to precisely describe algorithms is with state machines.来自 [If You’re Not Writing a Program, Don’t Use a Programming Language](http://bulletin.eatcs.org/index.php/beatcs/article/view/539/532)
 
 ## 此状态机非彼状态机
 - 整个算法/系统是一个状态机，而不是某个进程是个状态机。
-- 状态机的状态变化需要符合Properity约束
+- 状态机的行为(behaviour)需要符合Properity约束。
 
 ## State vs Behaviour
-## Behaviour
--  状态变更，组成的序列
+> An execution of an algorithm is represented mathematically as a sequence of states, where a state is an assignment of values to variables. A sequence of states is called a behavior.
+
+### State
+- 给一个或者多个变量的赋值
+
+### Behaviour
+-  状态序列
 
 ## State predicate vs Behavior property
 - State predicate： 每个状态需要满足的条件，例如类型，某些变量之间的关系，也经常称为Invariance。
