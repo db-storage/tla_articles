@@ -10,10 +10,14 @@
 
 ## State vs Behaviour
 > An execution of an algorithm is represented mathematically as a sequence of states, where a state is an assignment of values to variables. A sequence of states is called a behavior.
-- 但是state formula描述的不是赋值，而是描述赋值操作应该满足什么限制(表达式)。既可以写成 ```$x'=x+1$```这种，也可以写成`$x' \in 1..1000$`这种。显然，后者不可能是个赋值操作，它只是个谓词。
+
+
 
 ### State
-- 给一个或者多个变量的赋值
+- State的变更，看起来是给一个或者多个变量的赋值，但是在spec中出现的Next本质上是一个formula，它描述的是当前State和Next State之间需要满足的谓词条件；
+- 谓词本质上是个返回TRUE/FALSE的表达式；
+- TLC model checker在执行过程中，State Chang就是给各个变量赋值，只有符合Next中所有谓词条件的赋值，才能使Next为TRUE；
+- 谓词的形式可以是 x'=x+1 这种，也可以写成 x' \in  1..1000 这种。考虑后者就发现，它不可能是个赋值操作，它只是个谓词。
 
 ### Behaviour
 -  状态序列
