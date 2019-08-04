@@ -10,7 +10,7 @@
 
 ## State vs Behaviour
 > An execution of an algorithm is represented mathematically as a sequence of states, where a state is an assignment of values to variables. A sequence of states is called a behavior.
-- 但是state formula描述的不是赋值，而是描述赋值操作应该满足什么限制(表达式)。既可以写成 `$x'=x+1$`这种，也可以写成`$x' \in 1..1000$`这种。显然，后者不可能是个赋值操作，它只是个谓词。
+- 但是state formula描述的不是赋值，而是描述赋值操作应该满足什么限制(表达式)。既可以写成 ```$x'=x+1$```这种，也可以写成`$x' \in 1..1000$`这种。显然，后者不可能是个赋值操作，它只是个谓词。
 
 ### State
 - 给一个或者多个变量的赋值
