@@ -112,167 +112,65 @@ Spec中除了一些变量和常量定义，其余内容都是逻辑表达式(值
 
 # 5. TLA+ 是如何进行形式化验证的？
 
-## 一段C代码
 
-在了解TLA+的语法之前，先不写spec。假设我们看到以下一段C代码(这段代码不是来自实际系统)，我们想去用TLA+验证它是否正确：
-
-```c
-int gRunning = 0;
-
-//假设lock()与unlock()是正确实现了的加锁和解锁函数
-void thread_func(void *p) {
-  int running = 0;
-  while(true) {
-    //atomic step 0
-    lock(); 
-    gRunning++; //gRunning是全局变量
-    running = gRunning;
-    unlock();
-
-    //这里可以执行其他不修改读取running的操作，但是不使用gRunning。先省略。
-    
-    //atomic step 1， 包含下面三行
-    lock();
-    gRunning--;
-    running  = gRunning；
-    unlock();
-  }//while(true)
-}
-
-void main(int argc, argv){
-  //略，创建N个thread，分别执行thread_func
-}
-```
-
-代码中lock()与unlock()之间的临界区代码都可以被认为是一个原子步骤。 上述代码一共定义了两个原子步骤: s0, s1。为了避免对哪些操作是一个atomic step产生疑虑，我们在代码中使用了lock/unlock，虽然这并非必须的。
 
 
 
 ## 5.2 与代码对应的Spec
 
-对于前面的代码，我们做如下分析：
-
-- 这个代码实际上就是在循环执行两个步骤，即注释中的atomic step 0和1。
-- 不知道作者用全局变量gRunning和局部变量running的意图。我们假设作者是想确认在执行过程中，线程的 running和gRunning是相等的。
-
-我们可以写出下面的 spec，里面有比较详细的注释。注意有几个地方在代码里面是没有的：
-
-- 为每个线程增加了一个next变量，用于记录线程下一步应该执行的步骤。
-- 增加了 TypeInv 和 StateInv 两个 Safety Property，并且在TLC Model Checker执行时指定了要检查这两个State Predicate。
-
-> 由于这个例子比较特殊，我们描述的是一个循环，所以需要next变量。在后续的很多例子中，往往描述的是更抽象的逻辑，状态是用其他变量描述的，并不需要next变量。
+> [spec文件](https://github.com/db-storage/tla_articles/blob/master/Examples/Clock/HourMinuteClock.tla)直接下载
 
 ```tla
------------------------ MODULE ThreadSample -----------------------
-EXTENDS  Naturals, Sequences, FiniteSets, TLC
-----------------------(*Constants 和 Variables*)-------------------
-(* 运行时，需要在配置中指定 CONSTANT的值，ThreadIds一个集合 *)
-CONSTANT ThreadIds
-VARIABLE thread, gRunning
+---------------------------- MODULE HourMinuteClock ----------------------------
+EXTENDS Naturals, TLC
 
-(* 一共只有2个 Step *)
-kNumSteps == 2
-(* tThread类似于一个结构体类型定义, 每线程有两个变量：next 和 running。
-   next 实际上类似于汇编中的eip寄存器，表明下一步执行的语句。
-*)
-tThread == [ next : 0 .. kNumSteps - 1,  running : Nat ]
-(* 所有的变量列表 *)
-allVars == <<thread, gRunning>>
+----------------------------------------------------------------------------
+(* Variables 和 constants 定义部分 *)
+----------------------------------------------------------------------------
+VARIABLES hour, minute
+(* 所有变量组成的tuple，在Spec中用到 *)
+vars == <<hour, minute>>
+(* 允许在运行TLC Model Checker时配置。使用较小的值，便于测试、图形化显示结果等*)
+CONSTANT HoursPerDay
+CONSTANT MinPerHour
 
------------------------(* utility operations *)---------------------
-(* 取模操作封装。定义为 先加1 再取模。得到的还是个整数 *)
-NextValue(cur) == 
-  (cur + 1) % kNumSteps
+----------------------------------------------------------------------------
+(* State Predicate定义 *)
+----------------------------------------------------------------------------
+(* hour和minute的取值范围，用谓词表示 *)
+HourTypeOK == hour \in (0 .. HoursPerDay -1)
+MinuteTypeOK == minute \in (0 .. MinPerHour-1)
+(* 所有变量的取值范围限制谓词 *)
+TypeInv == HourTypeOK /\ MinuteTypeOK
 
-(* 判断线程 t 下一步要执行的等于s，注意 "=" 不是赋值，而是判断两边相等 *)
-AtStep(t, s) == 
-  thread[t].next = s
+----------------------------------------------------------------------------
+(* State Change 相关定义 *)
+----------------------------------------------------------------------------
+(* 初始化状态，正好与TypeInv式子相同。从任意一个时间点开始都可以 *)
+Init == HourTypeOK /\ MinuteTypeOK
+MinNext == minute' = (minute + 1) % MinPerHour
+HourNext == hour' = IF minute # (MinPerHour-1) THEN hour ELSE (hour + 1) % HoursPerDay
+(* Tick可以理解伪Clock走了以下 *)
+Tick == MinNext /\ HourNext
+Next == Tick /\ PrintT(<<hour, minute>>)
 
----------------------------(* 两个Step的定义 *)-----------------------
-(* 注意 带单引号'的变量，表示在下一个状态中，该变量需要满足的条件。
-   它不是赋值式，而是个逻辑表达式。
-   例如，下面的 "gRunning' = gRunning + 1" 解释为： 
-           在下一个状态中，gRunning的值，等于当前状态中gRunning的值加1
-    如果我们将其理解为赋值操作，那么就不可能与其他表达式做 && 运算了。           
-*)
+----------------------------------------------------------------------------
+(* Behavior Properity 相关定义 *)
+----------------------------------------------------------------------------
 
-
-(* 下面式子的含义：线程 t 执行step 0。
-   具体定义为多个表达式的逻辑与。只有前面判断条件成立，才会进入下一个状态。
-   LET 只是个临时变量定义，减少重复书写，没特别意义。LET 后面的三行，含义为：
-   && 前提条件： thread t 的 Next Step 是 0
-   && 下一个状态中，gRunning的值是当前值 + 1
-   && 下一个状态中，所有thread 中，只有 thread[t] 的状态有变化，其他thread不变
- *)
-AtomicStep0(t) == 
-   LET cur == thread[t].next IN
-     /\ AtStep(t, 0)  
-     /\ gRunning' = gRunning + 1  
-     /\ thread' =  
-       [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning' ] ]
-
-(* 线程 t 执行step 1，与上面类似 *)
-AtomicStep1(t) == 
-   LET cur == thread[t].next IN
-      /\ AtStep(t, 1)
-      /\ gRunning' = gRunning - 1
-      /\ thread' =  
-         [ thread EXCEPT ![t] = [next |-> NextValue(cur), running |-> gRunning'] ]
-
--------------------------(* 初始状态的表达式定义 *)-------------------------
-(* 合法的初始状态需要满足的公式。实际上只有一个状态能满足，即每个thread 的running
-   都是0，下一个要执行的步骤都是Step0
-*)
-Init == 
-  /\ thread = [ tid \in ThreadIds |->  [ running |-> 0, next |-> 0] ]
-  /\ gRunning = 0
-
------------------------------(* Next操作 *)--------------------------------
-(* 存在一个线程，能执行 Step0 或者 Step1。注意着也是个逻辑表达式 *)
-Next ==
-  \E  t \in ThreadIds:
-    \/ AtomicStep0(t)
-    \/ AtomicStep1(t)
-
-(* 初始状态为TRUE && 总是能执行Next或者保持不变。_allVars是个特殊写法 *)
-Spec == Init /\ [][Next]_allVars
-
----------------------------(* 两个Safety Check *)----------------- --------
-(* TypeInv 和 StateInv 是添加的不变式，不具体对应例子代码中的某个部分 *)
-(* 类型不变式 *)
-TypeInv == 
-  /\ thread \in [ ThreadIds ->  tThread ]
-  /\ gRunning \in Nat
- 
-(* 状态不变式 *)
-StateInv ==
-  /\ gRunning  <= Cardinality(ThreadIds)
-  /\ \A t \in ThreadIds: 
-      /\ thread[t].running <= Cardinality(ThreadIds)
-      /\ thread[t].running <= gRunning
-
+Spec == Init /\ [][Next]_vars /\ WF_vars(Tick)  /\ []TypeInv 
 =============================================================================
 ```
 
 
 
-## 5.3 配置单个Thread ID，执行 Model Check 结果
+## 5.3 配置较小的范围，执行 Model Check 结果
 
-在运行 TLC Model Checker 时，我们配置ThreadIds = { "A"}，即集合中只有一个thread，然后执行，可以得到以下的简单状态变更：
+在运行 TLC Model Checker 时，我们配置HoursPerDay= 3，MinPerHour =4, 能看到一个的简单状态变更：
 
-![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/1thread.jpg)
-
-由于单线程，一共就两个状态，执行 Step 2后，又回到初始状态，虽然可以一直运行，但是不同的状态数量就两个。两个状态中，各个变量的值变化我们也可以手工对应下。
+![hour_3_min_4](https://github.com/db-storage/tla_articles/blob/master/Figures/3_hour_minute_clock_1.jpg)
 
 
-
-## 5.4 配置两个Thread ID，执行 Model Check 结果
-
-如果配置 ThreadIds = { "A"，"B"}，执行后很快就出现 Error，因为 StateInv 不满足。并且明确告知这个错误状态是如何达到的。
-
-![1thread](https://github.com/db-storage/tla_articls/blob/master/Figures/2thread_err.jpg)
-
-这个错误，实际上是由于Spec中存在bug导致的。读者可以思考下，**为什么这个Error，在配置单线程Check时没有表现出来，而配置两个线程再Check就出现了**？
 
 
 
