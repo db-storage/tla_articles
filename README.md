@@ -20,6 +20,8 @@
 ## State predicate vs Behavior property
 - State predicate： 每个状态需要满足的条件，例如类型，某些变量之间的关系，也经常称为Invariance。
 - Behavior property: 不是看某个状态，而是整个序列需要满足的条件。例如Init/\[]Next，Liveness, Fairness，都不是单个状态的属性。
+- 有时候二者是可替换的，比如，对于每一个状态都需要保证的 "TypeOK"，既可以放到Invariants里面(作为state predicate)，也可以写成[]TypeOK，放到 Behaviour Properities里面。
+- 但是Liveness/Fairness这种本身就是针对Beheviour的，对于单个状态并无意义或者不会成立，只能作为Behaviour Property。
 
 ## TLA的spec里面一些不容易理解的地方
 ### 状态变更描述比较麻烦
