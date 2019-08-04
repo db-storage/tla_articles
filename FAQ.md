@@ -73,8 +73,16 @@ TLA+ spec **不能自动转变为代码**。
 ## Init /\ []Next_vars到底是什么含义？
 
 - 针对的是一个Behavior，而不是一个State，它就是一个Behavior Properity。
-- Behavior的初始状态需要满足 Init公式;
+
+- Behavior的初始状态需要满足 Init公式(注意，不是[]Init，而是Init);
+
+- 注意[]Next，而不是 Next；
+
+- 假设一个Behavior由S0, S1, S2, .., Sn这些状态组成，那么只有S0需要满足Init。而后面的所有状态变更，S0 --> S1, S2 --> S2，Sn-1 --> Sn这些，都需要满足Next约束；
+
 - Behavior的后续状态需要满足Next的条件，或者什么也不变。什么也不变称为为Stuttering Step，vars里面的变量都不修改，本文档后面有解释。
+
+  
 
 ## 为什么paxos的TLA+ spec那么简单？
 - 对比Raft的TAL+ spec，发现 paxos的内容确实非常少。
@@ -85,6 +93,9 @@ TLA+ spec **不能自动转变为代码**。
 - TLA+主要验证重要算法和模型，尤其是那些需要上帝视角的算法；
 - 并发是典型的适合用TLA+做验证的，但是其他算法也可以。
 
+
+
 ## Stuttering Steps 有啥用？
+
 - 考虑一个只有Hour和Minute两个变量的clock(AlgHM)，它作为有Hour,Minute，Second的Clock(AlgHMS)的Refine, AlgHMS作为AlgHM的一个实现，它共用AlgHM定义的Hour和Minute，但是自己定义了Second变量。 AlgHMS 可能只修改了Second变量，那么对于AlgHM来说，就是个Stuttering step，它必须允许自己看到的Hour和Minute都不变。(以下来自 [If You’re Not Writing a Program, Don’t Use a Programming Language](http://bulletin.eatcs.org/index.php/beatcs/article/view/539/532))
 > Steps allowed by AlgHMS that change only sec are stuttering steps of AlgHM , allowed by the next-state predicate (17). Therefore, AlgHMS will imply AlgHM. 
