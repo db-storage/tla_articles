@@ -1,6 +1,10 @@
+> 
+>
+> ![Lamport](http://lamport.azurewebsites.net/leslie.jpg)
+>
 > TLA+是Lamport大神近年来着力研究和推广的形式化描述语言，TLC Model Checker则是相应的形式化验证工具。
 >
-> Lamport是图灵奖获得者，早期著名的贡献包括Latex和Paxos等等等等(恕不一一列举)。就不再赘述了。
+> Lamport是图灵奖获得者，早期著名的贡献包括Latex和Paxos等等等等。就不再赘述了。
 >
 > Paxos当年就以难于理解著称，以至于有后来有很多文章去解释它，Lamport自己写了一篇"Paxos Made Simple"，大家仍然觉得看不懂。Paxos还有很多变种(比如Raft)，但是万变不离其宗。
 >
