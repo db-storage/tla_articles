@@ -11,7 +11,7 @@
 ## 状态机跟我们平时说的有区别么？
 
 - 整个算法/系统是一个状态机，而不是某个进程是个状态机。
-- 考虑一个3节点的Paxos集群，整个集群的运行，被看作一个状态机，而不是每个节点一个状态机。
+- 考虑一个3节点的Paxos集群，整个集群的运行，被看作一个状态机(实际上是个宇宙)，而不是每个节点一个状态机。
 
 
 
@@ -78,9 +78,9 @@ TLA+ spec **不能自动转变为代码**。
 
 
 
-## TLA+ spec这么复杂，我的代码上万行或者更多，怎么验证？
+## TLA+ Spec这么复杂，我的代码上万行或者更多，怎么验证？
 
-- TLA+主要验证重要算法和模型，尤其是那些需要上帝视角的算法；
+- TLA+主要验证核心算法和模型，尤其是那些需要上帝视角的算法；
 - 并发是典型的适合用TLA+做验证的，但是其他算法也可以。
 
 
@@ -91,11 +91,11 @@ TLA+ spec **不能自动转变为代码**。
 
 
 
-## 为什么paxos的TLA+ spec那么简单？
+## 为什么Paxos的TLA+ spec那么简单？
 
-- 对比Raft的TAL+ spec，发现 paxos的内容确实非常少。
-- 实际是Lamport主要关注算法的Correctness/Safety，而不是是Liveness/Performance。在"The TLA+ book"里面，也提到以Correctness为主。
-- 虽然在"paxos made simple"一文中描述了有leader大致怎么做，但是没有作为重点。因为Lamport认为有没有Leader都一样是正确的，有了leader只要遵循基本协议，也是正确的。这也导致很多人到现在仍然认为paxos没有leader。
+- 对比Paxos 和Raft的TAL+ spec，发现 Paxos的内容确实非常少。
+- Lamport的原话：  “Don't think about what may go wrong，think what must go right”。
+- 也就是说，保证执行的事件的正确性即可；那些未发生或者丢失的事件，不重要(相当于Behavior中这些事件被无限延迟，这是允许的)。
 
 
 
