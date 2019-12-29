@@ -130,8 +130,6 @@ ShowsSafeAt(Q, b, v) = \\
 \end{split}
 $$
 
-
-
 - 存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
 - **Cond 1:** Q内任意一个Acceptor a，满足$maxBal[a] >= b$
 - **Cond2:** 存在一个小于b的Ballot c，同时满足下面两个条件：
@@ -176,8 +174,18 @@ $$
 
 - 这里先不考虑$b_1$为 -1的场景
 
-- $VotedFor(a, b_1, v_1)$  ，它隐含了$\forall x<b_1:NoOtherChoosable(x, v_1)$
+- $VotedFor(a, b_1, v_1)$  ，它隐含了$SafeAt(b_1,v_1)$
+
 - $\forall x \in [b_1+1, b-1]: CannotVoteAt(a,x)$
+
+- 为了后续描述方便，这里增加一个定义，注意lower和upper不在$x$的范围内：
+  $$
+  \begin{split}
+  CannotVoteBetween(a, lower, upper) &= \\ 
+  &\forall x \in [lower+1, upper-1]: CannotVoteAt(a,x)
+  \end{split}
+  $$
+  
 
 ### Phase2a消息$phase2a(b, v)$：
 
@@ -213,7 +221,21 @@ $$
 
 
 
-## 3.4 其他部分解析
+## 4.4 还在担心并发导致的问题？
+
+假设在Propser p1顺利完成了phase1a，收到了了某个quorum Q1内所有成员的phase1b消息，然后发送phase2a消息$phase2a(b,v)$，但是在p1收到phase2b消息之前，另外一个proposer p2开始了phase1。我们假设p2使用的Ballot Number  $b'$。
+
+### 场景1:  $b'<b$
+
+这个场景下，p2的消息，都会被Q1内所有acceptor拒绝，所以没法形成Quorum。对 p1的phase2没有任何影响。
+
+### 场景2:  $b'>b$
+
+- 存在一个Quorum Q2，它们在给p1发送了phase2b后，才收到了p2的phase1。那么Q2内所有成员给p2发送的phase1b消息，都会包含$VotedFor(b, v)$，这就保证了$VotesSafe(b, v)$
+- 其他情况， Accept p1的phase2b消息构不成Quorum，其他成员先收到了p2的phase1，那么它们的maxBal 变成了 $b'$，不可能再让$(b, v)$被选定。
+- 既然$(b,v)$不可能被选定，那么整个问题就变成了p2用更大的Ballot Number $b'$ 执行paxos过程如何保证不会选定多个value的问题。曾经accept过$(b,v)$的少数派Acceptor，即使完全宕机，也不影响正确性。
+
+## 4.4 其他部分解析
 
 ### 3.4.1 定理 AllSafeAtZero
 
