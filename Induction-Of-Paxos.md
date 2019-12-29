@@ -1,22 +1,36 @@
-#  共识系列之原理推理
+#  Paxos的归纳法推理-(从TLA+ Spec抽取)
 
 ---
 
-Voting.tla，比Consensus.tla要复杂，有不少理论，但是一旦理解这个抽象和推理，再去理解paxos就不会觉得晦涩了。因此需要抓住主线：理解如何用归纳法得出Vote时需要满足的Safe条件 ，尤其是理解**NoneOtherChoosableAt 和 ShowsSafeAt**以及相关定理。
+**初衷**
 
-Voting.tla里面没有涉及Paxos的Phase1和Phase2，但是它里面的**归纳法推理才是Paxos算法正确性的核心**。理解这个推理，再去理解Paxos就非常自然了。
+在理解Paxos的TLA+ Spec过程中，发现其中其实隐含了Paxos正确性的基于不变式的归纳法证明。由于TLA+  spec不易理解，且基本没有高亮显示，所以先抽取其中相对易于理解的部分，用Latex公式表示，并辅以一些图形，希望能抛砖引玉。
 
-> Allow an acceptor to vote for value  $v$ in ballot $b$ only if no value other than $v$ has been or **ever will be chosen** in any ballot numbered less than $b$.
+这些证明是从Paxos的TLA+ Spec根据自己的理解抽取的，并非新东西。
+
+**为什么要写这么理论化的东西？**
+
+Paoxs已经这么难懂，为什么还要用形式化方法去说理论？形式化后可能是极简的，不一定是复杂的。其实用公式描述很多内容往往更简单，比如：$SafeAt(b,v)$ 表示：不可能用<=b的任何Ballot Number，选定value v以外的任何值。虽然后者意义上也没用问题，但是很容易让人抓不住重点，在推理或者证明时变得极其繁琐。
+
+# 1. 共识 (Consensus)的极简定义
+
+- 集合chosen: 选定的值的集合
+
+- Consensus的定义：被选定的Value个数小于等于1
+  $$
+  Consensus =  Cardinality(chosen) \leq 1
+  $$
+  
+
+# 2. Paxos形成共识的两个阶段
+
+回顾下Paxos的两个阶段：
+
+# 3. 一些定义
 
 ## 3.1 常量和变量定义部分
 
-- 常量 Value、Acceptor、 Quorum和Ballot都需要在执行TLC Model Checker时预先定义。Quorum是多个合法的Quorum的集合。Ballot是允许出现的Ballot Number，为了防止状态无限多，实际运行时需要限制 Ballot集合里面的元素个数。
-
-- QuorumAssumption类似于程序里面的assert，即认为任意两个quorum Q1, Q2都是相交的(至少有一个共同元素)，检查Quorum常量值的合法性。
-
-- 定理 QuorumNonEmpty 可以理解为理论性注释，即任意quorum Q都不为空。
-
-- votes 和 maxBal 都是 function，两个 function 的 domain 都是 Acceptor。用于记录每个Acceptor的投票记录以及收到的最大Ballot。参见 TypeOK 的定义。
+//TODO: 换成表格
 
 ```tla
 ------------------------------- MODULE Voting ------------------------------- 
@@ -34,8 +48,6 @@ VARIABLE votes,   \* votes[a] is the set of votes cast by acceptor a
 ```
 
 
-
-
 $$
 \begin{split}
 
@@ -45,25 +57,20 @@ ASSUME\space\space QuorumAssumption =\\ & \land \forall Q \in Quorum : Q \subset
 
 THEOREM \space\space QuorumNonEmpty = \\ 
 &\forall Q \in Quorum : Q \neq \{\} \\
-        
-TypeOK =  \\
-          &\land votes \in [Acceptor -> SUBSET (Ballot \times Value)] \\
-          &\land maxBal \in [Acceptor -> Ballot \cup {-1}]\\
 \end{split}
 $$
 
 
-## 3.2 基本操作定义
+
+## 3.2 基本函数定义
 
 - VotedFor(a, b, v):  Acceptor a曾经投票给选票($b$, $v$)
 
-- ChosenAt(b, v): 存在一个Quorum Q，Q 里面每个成员都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值，都是这个含义。
+- ChosenAt(b, v): 存在一个Quorum Q，Q里面每个成员都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值，都是这个含义。
 
-- chosen，注意这个与Consensu.tla里面的定义不同，它是动态构建的，类似于数据库里的 View的概念，是选定的值的集合。
+- DidNotVoteAt(a, b):  Acceptor a从未给 BN = b 的选票投票
 
-- DidNotVoteAt(a, b):  Acceptor a从未给任何 BN = b 的选票投票
-
-- CannotVoteAt(a, b)： Acceptor a不能再给任何 BN = b的选举投票，因为maxBal[a] >b并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 因为 chosen 是计算已有投票获得的，如果以前投过，就已经计算上了。
+- CannotVoteAt(a, b)： Acceptor a不能再给任何 BN = b的选举投票，因为maxBal[a] >b并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 实际上允许同一个phase2a 请求重复被应答。
   $$
   \begin{split}
   VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
@@ -81,13 +88,34 @@ $$
 ### 3.2.1 NoneOtherChoosableAt(b, v)
 
 - 定义: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票 (b,v)，要么没有为Ballot b投票，且永远不会为b投票。
+
 - 意义: 除了 v以外，不可能有任何其他value，可以用Ballot  b被选定
+
 - 反证：假设不成立，即存在某个Value $w$, $w\ne v$, 并且有ChosenAt(b, w)。则必须有某个 Quorum R，R内所有Acceptor都需要给(b, w)投票，根据Quorum的含义，R必然与 Q有交集，这与前提矛盾。
+
+  
+  $$
+  \begin{split}
+  NoneOtherChoosableAt(b, v) = \\
+  \exists Q \in Quorum : \\
+       & &\forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
+       \end{split}
+  $$
+  
 
 ### 3.2.2 SafeAt(b, v)
 
-- 定义： 任意Ballot $c$: $c < b$，NoneOtherChoosableAt(c, v)都成立。即：不可能用小于b的Ballot Number，选定v以外的任何值。
+- 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。
 
+- 注意：不能选定，**不代表不能Accept**，只是不会形成多数派
+
+- 公式：
+$$
+  \begin{split}
+  SafeAt(b, v) &= \\ 
+  &\forall c \in 0..(b-1) : NoneOtherChoosableAt(c, v)
+  \end{split}
+  $$
   
 
 ### 3.2.3 ShowsSafeAt(Q, b, v)
@@ -103,8 +131,6 @@ ShowsSafeAt(Q, b, v) = \\
 $$
 
 
-
-注意这个是每个Acceptor在投票前实际需要检查的条件，而不是推理，解释如下：
 
 - 存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
 - **Cond 1:** Q内任意一个Acceptor a，满足$maxBal[a] >= b$
@@ -122,7 +148,6 @@ $$
 ### 3.2.4 OneValuePerBallot
 
 - 任意2个不同Acceptor，如果给同一Ballot的选票投票，那么Value必须相同
-- 在Voting.tla里面，没提如何实现OneValuePerBallot ( Paxos才描述具体如何做到 )；
 - 与OneVote的区别是：OneValuePerBallot讨论的是不同的Acceptor
 
 $$
@@ -139,7 +164,38 @@ $$
 
 
 
-## 3.3 归纳推理核心部分
+# 4. 归纳推理
+
+## 4.1 各个消息的隐含的不变式
+
+### Phase1a消息
+
+无任何保证，随便发送
+
+### 每一条Phase1b消息 $phase1b(a, b_1, v_1)$
+
+- 这里先不考虑$b_1$为 -1的场景
+
+- $VotedFor(a, b_1, v_1)$  ，它隐含了$\forall x<b_1:NoOtherChoosable(x, v_1)$
+- $\forall x \in [b_1+1, b-1]: CannotVoteAt(a,x)$
+
+### Phase2a消息$phase2a(b, v)$：
+
+- $ShowSasfAt(Q, b, v)$
+
+  综合phase1b消息得出
+
+- $OneValuePerBallot$
+
+  不同的Proposer，不会用相同的Ballot Number；即使用相同的Ballot Number，执行两次phase1，只有一个能收到Quorum的回复。
+
+### Phase2b消息$phase2b(a, b, v)$
+
+- $VoteFor(a, b, v) => SafeAt(b,v)$
+
+ 
+
+## 4.3 基于不变式的归纳推理
 
 ==Voting.tla 里面的部分才是Paxos的核心。Paxos.tla 更多是这个理论的具体实现。==
 
@@ -154,37 +210,6 @@ $$
 
 
 下面是最核心部分，我们先用图说明如何从ShowSafeAt(Q, b, v)推理出SafeAt(b,v)，这个推理成立，即可保证VotesSafe。
-
-### 3.3.1 $ c = -1$ 的场景
-
-如果ShowSafeAt(Q,b,v)里面的c是-1，那么推理非常简单：Q内所有成员，在$[0, b-1]$区间都没有Vote过, 且不能再vote（$maxBal[a]>b$)，那么在[0, b-1]区间，不可能选定任何值。
-
-```mermaid
-graph LR
-A["任意a和d, d属于0..(b-1)，a属于Q，都有DidNotVoteAd(a,d)成立"]-.->C["[0,b-1]区间安全，即:SafeAt(b,v)"]
-B["任意a, a属于Q，都有maxBal[a]>=b"]-.->C
-```
-
-由于markdown绘图手段有限，我们用带箭头的虚线，表示一个或者多个前提条件都成立时，蕴含了箭头指向的断言。例如，上图中，左侧两个条件在一起，蕴含了右边的式子。
-
-### 3.3.2  $c \ne -1$的场景
-
-Quorum Q内的所有成员，有至少一个成员Vote过，其所有成员Vote过的最大Ballot Number是c。即Q内所有成员，在[c+1, b-1]区间都没有Vote过。在这种情况下，[0, b-1]区间的安全性，分为三个区间来分别推理。具体推理详见下面的图。
-
-```mermaid
-graph LR
-B["任意a属于Q : maxBal[a] >= b"]-.->A1["[c+1, b-1]区间安全，即任意 d 属于[c+1, b-1]: NoneOtherChoosableAt(d, v)"]
-A["\A d \in c+1..(b-1), a \in Q : DidNotVoteAt(a, d)"]-.->A1
-A1-.->C["[0,b-1]区间安全，即SafeAt(b,v)"]
-
-
-G["OneValuePerBallot"]-.->H["区间[c]安全，即:NoneOtherChoosableAt(c, v)"]
-J["存在a属于Q : VotedFor(a, c, v)"]-.->H
-
-H-.->C
-E["存在a属于Q : VotedFor(a, c, v)"]-.->I["SafeAt(c,v)，即[0,c-1]区间安全"]
-I-.->C
-```
 
 
 
@@ -215,7 +240,7 @@ I-.->C
 
 ### 3.4.4 定理 VotesSafeImpliesConsistency
 
-- 如果能满足TypeOK, VotesSafe和OneVote都成立，那么选定的最多只有一个值，不会选定多个。其中:
+- 如果能满足 VotesSafe和OneVote都成立，那么选定的最多只有一个值，不会选定多个。其中:
   - VotesSafe: 保证更小的**Ballot不会形成其他Value的决议**
   - OneVote: **同一Ballot**，不会有多个Value被投票，所以不会选定多个值
 
@@ -223,7 +248,7 @@ I-.->C
 
 ### 3.4.5 定理 ShowsSafety
 
-- 定理的含义:  如果TypeOK /\ VotesSafe /\ OneValuePerBallot成立，那么ShowsSafeAt(Q, b, v) => SafeAt(b, v)。
+- 定理的含义:  如果 VotesSafe 和 OneValuePerBallot成立，那么ShowsSafeAt(Q, b, v) => SafeAt(b, v)。
 - 这个定理就是3.3节推理过程图的形式化描述。
 
 $$
@@ -293,10 +318,11 @@ $$
   
   
   
+
 (* ShowSafeAt本身 和 C 不等于-1，蕴含了 Q内所有成员，不会为[c+1, b-1]区间 *)
   (* 的任意一个BN 投票，再考虑 QuorumAssumption 限制，即任意两个Quorum必然  *)
   (* 相交，所以不可能有某个Quorum R存在，它用[c+1, b-1]区间的某个BN形成决议  *)
-  $$
+$$
   \begin{split}
   ShowsSafeAt(Q, b, v) \and c \neq -1\\
     =>   &\land \forall a \in Q : maxBal[a] \geq b \\
@@ -306,10 +332,10 @@ $$
   &CannotVoteAt(a, d) \land QuorumAssumption \\
   =>  &\forall d \in (c+1)..(b-1), v \in Value: \lnot ChosenAt(d, w) 
   \end{split}
-  $$
+$$
+
   
-  
-  
+
 
 ### 3.5.2 ShowSafeAt，并没有要求maxBal[a]<=b，而是maxBal[a]>=b，那么怎么阻止<=b的ballot去形成决议呢？
 
@@ -359,10 +385,6 @@ $$
 -  IncreaseMaxBal比较接近。但是非常简要，纯数学抽象表示，没有描述消息过程。
 
 - 如果没有IncreaseMaxBal这个步骤，那么就没法取得进展了。因为 ShowsSafeAt就需要各个Acceptor的 maxBal[a]>=b，就是隐含执行了phase1a。
-
-### 4. 执行Model Checker
-
-// TODO
 
 
 
