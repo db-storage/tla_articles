@@ -105,7 +105,7 @@ $$
 
 1) 把maxBal做了修改，实际就是：$maxBal[a]' = m.bal$;
 
-2) 构建 "1b"消息四元组: <"1b", a, m.bal, maxVBal[a], maxBal[a]>。注意如果a从未执行过phase2b，maxVBal[a]就是-1，此时maxBal[a]为空 。
+2) 构建 "1b"消息四元组: <"1b", a, m.bal, maxVBal[a], maxVal[a]>。注意如果a从未执行过phase2b，maxVBal[a]就是-1，此时maxBal[a]为空 。
 
 3) Send  “1b"消息，Send的含义在前面有解释。**注意：**一旦发送了"1b"，$maxBal[a]$ 就增加了，所以下次收到Ballot Number相同的Phase1a，不会再相应。
 
@@ -162,7 +162,7 @@ $$
 
 ​       $maxVal[a]'= m.val]$
 
-### 发送"2b"消息(代表Vote)
+### 发送"2b"消息(即Vote)
 
    "2b"消息带有Acceptor的ID(参数a)，以及从"2a"消息m里面获取的$m.bal$和$m.val$ 。
 $$
@@ -180,15 +180,15 @@ $$
 
 - 因为执行Phase2b的Acceptor，不一定执行了Phase1b ，所以可能根本没有修改。
 
-# 3. 推理相关的函数/不变式定义
+# 3. 推理相关的式子
 
-下面这些定义不是2阶段的一部分，但是对于理解两阶段为什么是对的，却是很重要的。
+下面这些定义不是Paxos两阶段的一部分，但是对于理解两阶段为什么是对的，却是很重要的。
 
 ## 3.2 基本函数定义
 
-- VotedFor(a, b, v):  Acceptor a曾经投票给选票($b$, $v$)；
+- VotedFor(a, b, v):  Acceptor a曾经Vote了选票($b$, $v$)，注意Voted/Accepted会交换使用。
 
-- ChosenAt(b, v): 存在一个Quorum Q，Q里面每个成员都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是这个含义；
+- ChosenAt(b, v): 存在一个Quorum Q，Q里面每个成员都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是ChosenAt的含义；
 
 - DidNotVoteAt(a, b):  Acceptor a从未给 $BN = b$ 的选票投票；
 
@@ -209,25 +209,23 @@ $$
 
 ### 3.2.1 NoneOtherChoosableAt(b, v)
 
-- 意义: 除了v以外，不可能用 Bal b选定其他value。注意：这个谓词公式，并**没有隐含$ChosenAt(b,v)$**为true。
+$$
+\begin{split}
+NoneOtherChoosableAt(b, v) = \\
+\exists Q \in Quorum : \\
+     & &\forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
+     \end{split}
+$$
 
-- 定义/实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票 (b,v)，要么没有为Ballot b投票，且永远不会为b投票。
-
-- 反证：假设不成立，即存在某个Value $w$, $w\ne v$, 并且有ChosenAt(b, w)。则必须有某个 Quorum R，R内所有Acceptor都需要给(b, w)投票，根据Quorum的含义，R必然与 Q有交集，这与前提矛盾。
-  $$
-  \begin{split}
-  NoneOtherChoosableAt(b, v) = \\
-  \exists Q \in Quorum : \\
-       & &\forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
-       \end{split}
-  $$
-  
+- 意义: 除了v以外，不可能用 Bal b选定其他Value。注意：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true。它只是否定别人，并没有肯定自己。
+- 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经Vote了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
+- 反证：假设存在某个Value $w$, $w\ne v$, 有ChosenAt(b, w)。则必须有某个 Quorum R，满足： $\forall a \in R, VotedFor(a, b, w)$，根据Quorum的含义，R必然与 Q有交集，假设这个交集包含 acceptor $a_1$，那么有: $a_1: a_1 \in Q VotedFor(a_1, b, w)$这与前提矛盾。
 
 ### 3.2.2 SafeAt(b, v)
 
-- 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。
+- 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的范围扩展到一个区间$[0, b-1]$.
 
-- 注意：不能选定，**不代表不能Accept/Vote**， 只要vote不形成Quorum即可。
+- 注意：不能被选定，**不代表不能Accept/Vote**， 只要vote不形成Quorum即可。
 
 - 公式：
 $$
@@ -250,7 +248,7 @@ ShowsSafeAt(Q, b, v) = \\
 \end{split}
 $$
 
-- 存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
+- 含义：存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
 - **Cond 1:** Q内任意一个Acceptor a，满足$maxBal[a] >= b$
 - **Cond2:** 存在一个小于b的Ballot c，同时满足下面两个条件：
   - **Cond 2.1:** 如果 $c \ne -1$，则满足：Q中至少有一个Acceptor a, a给(b, v)投过票。注意，如果 $c == -1$，则没有限制，这是一个特殊场景，即所有Acceptor都没有投过票。
@@ -263,9 +261,11 @@ $$
   VotedFor(a,c,v)和OneValuePerBallot，保证了如果Ballot c选定了某个值，那么这个值只能是v，也就是NoneOtherChoosableAt(c, v)；
 - ShowsSafeAt(Q, b, v) 与 SafeAt(b, v)的最大不同点：前者只需要收集某个Quorum的response，而不需要全部，是个可行的Enabling Condition。
 
+
+
 ### 3.2.4 几个不变式
 
-- 任意两个不同Acceptor，如果给同一Bal的Phase1a选票投票，那么Value必须相同
+- 任意两个不同Acceptor，如果给同一Bal的Phase1a选票投票，那么Value必须相同；
 - 与OneVote的区别是：OneValuePerBallot讨论的是不同的Acceptor之间的关系：
 
 $$
@@ -282,27 +282,21 @@ $$
 
 # 4. 归纳推理
 
-## 4.1 各个消息的隐含的不变式
+## 4.1 各个消息的隐含的承诺(不变式)
 
-### Phase1a消息 $phase1a(b, v)$
+### Phase1a消息 <"1a", b>
 
 - 它本身无任何保证，随便发送。
 
-### Phase1b消息 $phase1b(a, b_1, v_1)$
+### Phase1b消息$<"1b", a, b, maxVBal[a], maxBal[a]>$
 
-- 这里先不考虑$b_1$为 -1的场景
+- $m.bal$: 隐含了不会响应 $Bal <= m.bal$的Phase1a，因为Phase1b的前提不满足了。
+- a不会Accept任何 $Bal <m.bal$的Phase2a，即 $\forall x \in [maxVBal[a]+1, b-1]: CannotVoteAt(a,x)$， 如果$maxVBal[a]=-1$，就变成： $\forall x \in [0, b-1]: CannotVoteAt(a,x)$;
 
-- $VotedFor(a, b_1, v_1)$  ，它隐含了$SafeAt(b_1,v_1)$
+- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxVBal[a], maxBal[a])$  ，它隐含了$SafeAt(maxVBal[a], maxBal[a])$；
 
-- $\forall x \in [b_1+1, b-1]: CannotVoteAt(a,x)$
+- 如果$maxVBal[a] \neq -1 $  ，表明a没有Accept过任何请求Phase1a； 
 
-- 为了后续描述方便，这里增加一个定义，注意lower和upper不在$x$的范围内：
-  $$
-  \begin{split}
-  CannotVoteBetween(a, lower, upper) &= \\ 
-  &\forall x \in [lower+1, upper-1]: CannotVoteAt(a,x)
-  \end{split}
-  $$
   
 
 ### Phase2a消息$phase2a(b, v)$：
@@ -313,7 +307,26 @@ $$
 
 - $OneValuePerBallot$
 
-  不同的Proposer，不会用相同的Ballot Number；即使用相同的Ballot Number，执行两次phase1，只有一个能收到Quorum的回复。
+  不同的Proposer，不会用相同的Ballot Number；即使用相同的Ballot Number，执行两次phase1，只有第一个能收到Quorum的回复(因为执行Phase1b(a)后，maxBal[a]被增加了)。
+
+$$
+\begin{split}
+ CannotVoteBetween(a, start, end) &= \\ 
+  &\forall x \in [start+1, end-1]: CanntVoteAt(a, x)
+ \end{split}
+$$
+
+ShowsSafeAt(Q, b, v)的物理含义：
+
+- 前提是：某个Quorum Q中所有Acceptor都响应了Phase1b(每个人单独承诺了)；
+
+- 多个Phase1b消息四元组 <"1b", a, m.bal, maxVBal[a], maxVal[a]> 中最大的maxVBal找到，这个值就是c；
+
+- 如果$c \neq 1$，那么一定有一个对应的maxVal，这个Value作为本轮Phase2a的Value v；
+
+- 如果 $c=-1$，那么对Phase2a的Value就没有任何约束了。
+
+  
 
 ### Phase2b消息$phase2b(a, b, v)$
 
@@ -328,10 +341,6 @@ $$
 在前述部分的基础上，我们可以描述Voting模块部分的推理过程。假设OneValuePerBallot可以保证(先不管如何做到的)，且每个Voter的每次投票，都需要保证安全是否可以做到呢？
 
 我们首先得知道投票安全的含义是什么，然后说怎么保证。下面是个简单的过程描述。
-
-
-
-![tu](https://github.com/db-storage/tla_articles/raw/master/Figures/VoteFor-Safety.png)
 
 
 
@@ -475,43 +484,4 @@ $$
 $$
 
   
-
-
-### 3.5.2 ShowSafeAt，并没有要求maxBal[a]<=b，而是maxBal[a]>=b，那么怎么阻止<=b的ballot去形成决议呢？
-
-$$
-ShowsSafeAt(Q, b, v) =
-  \forall a \in Q : maxBal[a] \geq b
-$$
-
-
-
-- 虽然要求Quorum的 maxBal[a] >= b，但是VoteFor时，必须有maxBal[a] <= b。这样就只可能为b形成决议，而 < b的x，VoteFor 不会被执行。
-  $$
-  \begin{split}
-  VoteFor(a, b, v) =\\
-      & \land maxBal[a] \leq b\\
-      & \land ...
-      \end{split}
-  $$
-  
-
-###  3.5.3 Voting.tla 里面 OneValuePerBallot 是怎么保证的？
-
-- 参见VoteFor的条件，实际上是检查了所有acceptor的vote，对于数学抽象可以这么写。但是实际上系统中很难原子地检查所有Acceptor的vote。
-
-$$
-\begin{split}
-VoteFor(a, b, v) =&\\
-   &\land ... \\
-   &\land \forall c \in Acceptor 	\setminus {a} : \\
-    & &       \forall vt \in votes[c] : (vt[1] = b) => (vt[2] = v)\\
- \end{split}
-$$
-
-
-
-- 对于Paxos，实际上从两方面保证：1) 不同的Proposer可用的Ballot Number是不同的；2) 同一Proposer，在使用同一个Ballot Number发送Phase2a时，不会修改Value。3) 如果用同一个Ballot Number执行两次Phase1，那么第二次时
-
-
 
