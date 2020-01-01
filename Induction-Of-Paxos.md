@@ -2,42 +2,42 @@
 
 ---
 
-**初衷**
+**前言**
 
 在理解Paxos的TLA+ Spec过程中，发现其中其实隐含了Paxos正确性的基于不变式(Invariance)的推理。由于TLA+  spec不易理解，且基本没有高亮显示，所以先抽取其中相对易于理解的部分，大部分改用Latex公式表示，并辅以图形和文字，希望能抛砖引玉。部分内容仍然是 TLA+格式的，但是近来通过文字或者表格来辅助理解。
 
 这些内容是从Paxos的TLA+ Spec根据自己的理解抽取和组织的，并非新东西，如果有发现不准确的地方，欢迎批评指正。
 
-**为什么要写这么理论化的东西？**
-
 Paoxs已经这么难懂，为什么还要用偏理论的方法去说理论？其实形式化往往是更准确的，在理想情况下可能还是极简的，不一定是复杂的。比如：$SafeAt(b,v)$ 表示：”不可能用<b的任何Ballot Number，选定value v以外的任何值“。虽然后者意义上也没用问题，但是太繁琐，而且在做推理或者证明时变得极其繁琐而事实上难以描述。
+
+理解本文的关键在于：理解投票安全性的含义，即一个Acceptor为某个$<b, v>$投票时，需要确认是安全的，那么安全的含义是什么? 就是：不可能有人用小于b的Ballot Number选定v以外的值。注意，这个保证实际上是向更小的Ballot Number看的，**保证更小的Ballot Number需要满足某个条件**，**而不需要保证更大的Ballot Number怎么样**。实际上不需要在两个方向都保证，也不可能有这种保证。
 
 # 1. 共识 (Consensus)的极简定义
 
 ## 1.1 Consensus的定义
 
-- Consensus的定义：chosen的元素小于等于1
+- Consensus的定义：chosen的元素个数小于等于1。chosen是个集合，下面会提到。
   $$
   Consensus =  Cardinality(chosen) \leq 1
   $$
 
 # 2. Paxos的两个阶段回顾
 
-这一部分回顾下Paxos的两个阶段，从paxos的 TLA+里面摘取了其公式表示。跟"Paxos Made Simple"一文的描述是相同的，但是更多是数学描述。
+这一部分回顾下Paxos的两个阶段，从paxos的 TLA+ Spec里面摘取了其公式表示。跟"Paxos Made Simple"一文的描述是相同的，但更多是数学描述。
 
 ## 2.1 常量和变量定义部分
 
-我们先抽取一些必要的变量和常量定义 。这些对于有计算机或者数学基础的读者应该不难 。
+我们先抽取一些必要的变量和常量定义 。这些对于有计算机或者数学基础的读者应该不难 。其中常量是需要预先给定值的。
 
 | 名称     | 类型 | 含义                                                         |
 | -------- | ---- | ------------------------------------------------------------ |
 | Acceptor | Set  | 所有接收者的集合                                             |
-| Quorum   | Set  | 里面的每个成员，例如Q1，也是一个Set。且Q1是Acceptor的subset  |
-| maxBal   | Map  | maxBal[a]表示acceptor a响应过的最大Ballot Number，在phase1b修改。只增不减 |
-| maxVBal  | Map  | Max Voted Ballot。maxVBal[a]表示acceptor a曾经Vote过的最大的Ballot Number，在phase2b修改。只增不减 |
-| maxVal   | Map  | Max Voted Value。 maxVal[a]表示acceptor a曾经Vote过的最大的Ballot Number对应的Value，在phase2b修改。<"2b", a, maxVBal[a], maxVal[a]>构成了一个Phase2b消息四元组 |
-| Votes    | Map  | votes[a] 记录acceptor a曾经vote过<Bal, Value>元组            |
-| msgs     | Set  | 所有发过的消息集合(在这个验证模型中，msg一直保留)            |
+| Quorum   | Set  | 里面的每个成员，例如Q1，也是一个Set。且Q1是Acceptor的SubSet  |
+| maxBal   | Map  | maxBal[a]表示acceptor a响应/Accept过的最大Ballot Number，在phase1b/phase2b修改。只增不减。 |
+| maxVBal  | Map  | Max Voted Ballot。maxVBal[a]表示acceptor a曾经Vote过的最大的Ballot Number，在phase2b修改。只增不减。 |
+| maxVal   | Map  | Max Voted Value。 maxVal[a]表示acceptor a曾经Vote过的最大的Ballot Number对应的Value，在phase2b修改。<"2b", a, maxVBal[a], maxVal[a]>构成了一个Phase2b消息四元组。 |
+| Votes    | Map  | votes[a] 记录acceptor a曾经vote过的<Bal, Value>元组          |
+| msgs     | Set  | 所有发过的消息集合(在Paxos的TLA+ Spec中，msg不删除)          |
 | Chosen   | Set  | 被选定的Value的集合                                          |
 
 
@@ -48,14 +48,16 @@ CONSTANT Acceptor,
                     \*   "large enough" set of acceptors
 CONSTANT Ballot
 
-VARIABLE maxBal   \* maxBal[a] is a ballot number.  Acceptor a will cast
+VARIABLE
+        votes,   \* votes[a] is the set of votes cast by acceptor a
+        maxBal   \* maxBal[a] is a ballot number.  Acceptor a will cast
                   \*   further votes only in ballots numbered \geq maxBal[a]      
         maxVBal, \* <<maxVBal[a], maxVal[a]>> is the vote with the largest
-         maxVal,    \* ballot number cast by a; it equals <<-1, None>> if
+        maxVal,    \* ballot number cast by a; it equals <<-1, None>> if
                     \* a has not cast any vote.
-         msgs     \* The set of all messages that have been sent.
+        msgs     \* The set of all messages that have been sent.
                   VARIABLE chosen       
-         chosen    \*The set of all values that can be chosen.
+        chosen    \*The set of all values that can be chosen.
 ```
 
 
@@ -66,9 +68,9 @@ $$
 \begin{split}ASSUME\space\space QuorumAssumption =\\ & \land \forall Q \in Quorum : Q \subseteq Acceptor\\                           &\land  \forall Q1, Q2 \in Quorum : Q1 \cap Q2 \neq \{\}  \\THEOREM \space\space QuorumNonEmpty = \\ &\forall Q \in Quorum : Q \neq \{\} \\\end{split}
 $$
 
-感兴趣的读者可以自己计算下，满足上面的式子，Q1, Q2不一定都需要达到Acceptor的半数以上，它们的成员个数不一定是相等的。。
+感兴趣的读者可以自己计算下，要满足上面的式子，Q1, Q2的成员个数不一定都需要达到Acceptor的半数以上，它们的成员个数不一定是相等的。
 
-在后面的很多式子中，我们用到逻辑与$\land$和逻辑或$\lor$，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$。
+在后面的很多式子中，我们经常用到逻辑与$\land$和逻辑或$\lor$，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$。
 
 ## 2.2 Phase1a
 
@@ -89,6 +91,8 @@ Send(m) = msgs' = msgs \cup \{m\}
 $$
 在Paxos的TLA+ spec里面，没有模拟许多通信信道，而是把所有msg放到一个集合(msgs)里面，通过type和bal来区分。Send(m)就是修改msgs，使得msgs的新状态为：msgs和{m}的并集。$msg'$表示msg被修改后的状态。
 
+$msgs'$的含义：在状态机中，变量$msg$的下一个状态的值。其他变量也类似。
+
 ## 2.3 Phase1b
 
 Phase1b过程，是Acceptor 根据自己的变量去判断，能否响应一个 Phase1a消息，如果符合条件，则响应一个Phase1b。参数 a是Acceptor自己的标识。
@@ -97,17 +101,17 @@ $$
 $$
 
 
-其中最重要的前提条件是：存在一个 "1a" msg m，m.bal 大于a自己的maxBal。即：
+其中最重要的前提条件是：存在一个 "1a" msg m，m.bal 大于maxBal[a]。即：
 
 ​           $ m.type = "1a" \land \space m.bal > maxBal[a]$。
 
 注意，在前提成立的情况下，Phase1b做了两件事(其他所有变量都是Unchanged)：
 
-1) 把maxBal[a]做了修改，实际就是：$maxBal[a]' = m.bal$;
+1) 修改maxBal[a]：$maxBal[a]' = m.bal$;
 
 2) 构建 "1b"消息四元组:$ <"1b", a, m.bal, maxVBal[a], maxVal[a]>$。注意如果a从未执行过phase2b，maxVBal[a]就是-1，此时maxBal[a]为空 。
 
-3) Send  “1b"消息，Send的含义在前面有解释。**注意：**一旦发送了"1b"，$maxBal[a]$ 同时增加了，所以下次收到Bal相同的Phase1a，$m.bal > maxBal[a]$就不成立了，这是OneValuePerBallot的基础。
+3) Send  “1b"消息，Send的含义在前面有解释。**注意：** Phase1b等各种操作都被认为是原子的，一旦发送了"1b"，$maxBal[a]$ 必然也增加了，所以下次收到Bal相同的Phase1a，$m.bal > maxBal[a]$ 这个前提条件就不成立了，这是OneValuePerBallot的基础。
 
 ## 2.4 Phase2a
 
@@ -119,9 +123,9 @@ $$
 
 **确定val，构建Phase2a消息:**
 
-​      1) Q1b为该Qurom Q发送的Phase1b消息集合；
+​      1) Q1b为该 Q发送的Phase1b消息集合；
 
-​      2) Q1bv为Q1b中，所有$m.mbal \geq 0$的消息集合；
+​      2) Q1bv是Q1b中，所有$m.mbal \geq 0$的消息集合；
 
 ​      3) 如果Q1bv为空，说明Q里面所有成员都没有Vote过，所以v由proposer自己决定；
 
@@ -148,7 +152,7 @@ $$
 
 ## 2.5 Phase2b
 
-​     一个Acceptor执行Phase2b的过程，也分为大致以下几个部分。
+​     一个Acceptor执行Phase2b的过程，分为以下几个部分。
 
 ### 检查前提条件
 
@@ -176,7 +180,9 @@ Phase2b(a) = \exists m \in msgs : &\land m.type = "2a"\\
                &  \qquad \qquad   bal |-> m.bal, val |-> m.val]) 
 \end{split}
 $$
-**FAQ: 为什么Phase1b和Phase2b都修改 $maxBal[a]'$** ？ 
+
+
+**FAQ:  为什么Phase1b和Phase2b都修改 $maxBal[a]'$** ？ 
 
 - 因为执行Phase2b的Acceptor，不一定执行了Phase1b 。
 
@@ -192,7 +198,7 @@ $$
 
 - DidNotVoteAt(a, b):  Acceptor a从未给 $Bal = b$ 的选票投票；
 
-- CannotVoteAt(a, b)： Acceptor a不能再给任何 $Bal = b$的选举投票，因为$maxBal[a] >b$并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 实际上允许同一个phase2a 请求重复被应答。
+- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票，因为$maxBal[a] >b$并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 实际上允许同一个phase2a 请求重复被应答。
   $$
   \begin{split}
   VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
@@ -217,13 +223,14 @@ NoneOtherChoosableAt(b, v) = \\
      \end{split}
 $$
 
-- 意义: 除了v以外，不可能用 Bal b选定其他Value。注意：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true。即它只是否定别人，并没有肯定自己。
+- 意义: 除了v以外，不可能用 Bal b选定其他Value。
+- **注意**：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true。即它只是否定部分别人，并没有肯定自己。
 - 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经Vote了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
 - 反证：假设存在某个Value $w$, $w\ne v$, 有ChosenAt(b, w)。则必须有某个 Quorum R，满足： $\forall a \in R, VotedFor(a, b, w)$，根据Quorum的含义，R必然与 Q有交集，假设这个交集包含 acceptor $a_1$，那么有: $a_1: a_1 \in Q VotedFor(a_1, b, w)$这与前提矛盾。
 
 ### 3.2.2 SafeAt(b, v)
 
-- 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的范围扩展到一个区间$[0, b-1]$.
+- 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的Bal范围定义到到一个区间$[0, b-1]$.
 
 - 注意：不能被选定，**不代表不能Accept/Vote**， 只要vote不形成Quorum即可。
 
@@ -289,13 +296,13 @@ $$
 
 ## 4.1 各个消息的隐含的承诺(不变式)
 
-### Phase1a消息 <"1a", b>
+### Phase1a消息 <"1a", b>:
 
 - 它本身无任何保证，随便发送。
 
-### Phase1b消息$<"1b", a, b, maxVBal[a], maxBal[a]>$隐含了：
+### Phase1b消息$<"1b", a, b, maxVBal[a], maxBal[a]>$：
 
-- a不会再响应 $Bal <= m.bal$的Phase1a。
+- a不会再响应 $Bal <= m.bal$的Phase1a；
 - a不会Accept任何 $Bal <m.bal$的Phase2a，即 $\forall x \in [maxVBal[a]+1, b-1]: CannotVoteAt(a,x)$， 如果$maxVBal[a]=-1$，就变成： $\forall x \in [0, b-1]: CannotVoteAt(a,x)$;
 
 - 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxVBal[a], maxBal[a])$  ，它隐含了$SafeAt(maxVBal[a], maxBal[a])$；
@@ -304,7 +311,7 @@ $$
 
   
 
-### Phase2a消息 $phase2a(b, v)$ 隐含了
+### Phase2a消息 $phase2a(b, v)$ :
 
 - $ShowSasfAt(Q, b, v)$
 
@@ -318,10 +325,15 @@ $$
   $$
   maxBal[a] \geq b \land CannotVoteBetween(a1, b1, b) \land SafeAt(b1, v1)，
   $$
-  其他几个也类似。假设$ b_1>=b_2>=b_3$且b1>-1，那么我们得出：
-
-  ​                           $ SafeAt(b1, v1) \land \forall a \in Q: \land maxBal[a] \geq b \land CannotVoteBetwwn(a, b1, b)$ 
-
+  其他几个也类似。假设$ b_1>=b_2>=b_3$且b1>-1，那么我们得出：                          
+  $$
+  \begin{split}
+  &\land SafeAt(b1, v1) \\
+  &\land \forall a \in Q: \\
+  & &\land maxBal[a] \geq b \\
+  & &\land CannotVoteBetwwn(a, b1, b)
+  \end{split}
+  $$
   如果取$c = b_1$，那么可以得出   $ShowsSafeAt(Q, b, v)$；
 
   考虑特殊情况，$b_1=b_2=b_3=-1$，那么取$c=-1$，也能满足  $ShowsSafeAt(Q, b, v)$。
@@ -338,19 +350,19 @@ $$
 
   
 
-### Phase2b消息$phase2b(a, b, v)$
+### Phase2b消息$phase2b(a, b, v)$：
 
 - $VoteFor(a, b, v) => SafeAt(b,v)$
 
- 
 
-## 4.3 基于不变式的推理
+
+## 4.3 基于不变式的推导
 
 我们总结下上面的步骤可以发现: Phase1a不会影响正确性，Phase1b是Acceptor根据自己的局部信息在做决策；Phase2a是最复杂的，它根据各个Acceptor的反馈在做决策，而这些Acceptor的状态是变化的(起码maxBal可能变化)；Phase2b 实际上也是各个Acceptor根据局部信息在做决策。
 
-Paxos的理念是：一旦投票给(b, v)，需要保证不会SafeAt(b, v)。保证未来是困难的，但是paxos是在保证不会用更小的Bal，形成可能冲突的共识。
+Phase2a计算的v，已经决定了SafeAt(b, v)的成立，它跟Phase2b是否成立无关，如果一个 Acceptor拒绝了 Phase2a，那么是由于$maxBal[a]>b$，而SafeAt(b, v)考察的是 $ < b$的那部分Bal。
 
-### 4.3.1 分三个区间讨论投票安全性
+### 4.3.1 分三个区间推导
 
 继续按照上面的例子来思考，我们可以把 $<=b$ 的Bal分为三个区间：
 
