@@ -14,17 +14,29 @@ Paoxs已经这么难懂，为什么还要用形式化方法去说理论？其实
 
 # 1. 共识 (Consensus)的极简定义
 
-我们先抽取一些必要的变量和常量定义 。这些对于有计算机或者数学基础的读者应该不难 。
+## 1.1 Consensus的定义
 
-## 1.1 常量和变量定义部分
+- Consensus的定义：chosen的元素小于等于1
+  $$
+  Consensus =  Cardinality(chosen) \leq 1
+  $$
+
+# 2. Paxos的两个阶段回顾
+
+这一部分回顾下Paxos的两个阶段，从paxos的 TLA+里面摘取了其公式表示。
+
+## 2.1 常量和变量定义部分
+
+我们先抽取一些必要的变量和常量定义 。这些对于有计算机或者数学基础的读者应该不难 。
 
 | 名称     | 类型 | 含义                                                         |
 | -------- | ---- | ------------------------------------------------------------ |
 | Acceptor | Set  | 所有接收者的集合                                             |
 | Quorum   | Set  | 里面的每个成员，例如Q1，也是一个Set。且Q1是Acceptor的subset  |
-| maxBal   | Map  | maxBal[a]表示acceptor a响应过的最大Ballot Number，在phase1b修改。只增不减。 |
-| maxVBal  | Map  | Max Voted Ballot。maxVBal[a]表示acceptor a曾经Vote过的最大的Ballot Number，在phase2b修改。只增不减。 |
-| maxVal   | Map  | Max Voted Value。 maxVal[a]表示acceptor a曾经Vote过的最大的Ballot Number对应的Value，在phase2b修改。<"2b", a, maxVBal[a], maxVal[a]>构成了一个Phase2b消息四元组。 |
+| maxBal   | Map  | maxBal[a]表示acceptor a响应过的最大Ballot Number，在phase1b修改。只增不减 |
+| maxVBal  | Map  | Max Voted Ballot。maxVBal[a]表示acceptor a曾经Vote过的最大的Ballot Number，在phase2b修改。只增不减 |
+| maxVal   | Map  | Max Voted Value。 maxVal[a]表示acceptor a曾经Vote过的最大的Ballot Number对应的Value，在phase2b修改。<"2b", a, maxVBal[a], maxVal[a]>构成了一个Phase2b消息四元组 |
+| Votes    | Map  | votes[a] 记录acceptor a曾经vote过<Bal, Value>元组            |
 | msgs     | Set  | 所有发过的消息集合(在这个验证模型中，msg一直保留)            |
 | Chosen   | Set  | 被选定的Value的集合                                          |
 
@@ -51,93 +63,69 @@ VARIABLE maxBal   \* maxBal[a] is a ballot number.  Acceptor a will cast
 对Quorum的要求：
 
 $$
-\begin{split}
-
-ASSUME\space\space QuorumAssumption =\\ & \land \forall Q \in Quorum : Q \subseteq Acceptor\\
-                           &\land  \forall Q1, Q2 \in Quorum : Q1 \cap Q2 \neq \{\}  \\
-
-
-THEOREM \space\space QuorumNonEmpty = \\ 
-&\forall Q \in Quorum : Q \neq \{\} \\
-\end{split}
+\begin{split}ASSUME\space\space QuorumAssumption =\\ & \land \forall Q \in Quorum : Q \subseteq Acceptor\\                           &\land  \forall Q1, Q2 \in Quorum : Q1 \cap Q2 \neq \{\}  \\THEOREM \space\space QuorumNonEmpty = \\ &\forall Q \in Quorum : Q \neq \{\} \\\end{split}
 $$
 
 感兴趣的读者可以自己计算下，满足上面的式子，Q1, Q2不一定都达到Acceptor的半数以上。
 
-## 1.2 Consensus的定义
+在后面的很多式子中，我们用到逻辑与$\land$和逻辑或$\lor$，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$。
 
-- Consensus的定义：chosen的元素小于等于1
-  $$
-  Consensus =  Cardinality(chosen) \leq 1
-  $$
-
-# 2. Paxos的两个阶段回顾
-
-回顾下Paxos的两个阶段，从paxos的 TLA+里面摘取了其公式表示：
-
-## 2.1 Phase1a
+## 2.2 Phase1a
 
 Phase1a即Proposer给各个Acceptor发送phase1a消息，参数b为Ballot Number。
 
 **发送Phase1a无需任何前提条件**，直接发送1a消息，它不带有任何承诺。注意1a消息，是一个二元组，可以理解成一个结构体。
 
-UNCHANGED部分是说其他的变量不变。
+”UNCHANGED“是TLA+ spec的语法，说名某些变量不变，保留这些只是为了保持完整性，读者可以忽略这些“UNCHANGED” 部分。
 $$
 \begin{split}
 Phase1a(b) = &\land Send([type |-> "1a", bal |-> b])\\
               &\land UNCHANGED <<maxBal, maxVBal, maxVal>>\\
 \end{split}
 $$
-
-
 Send的含义：
 $$
 Send(m) = msgs' = msgs \cup \{m\}
 $$
-在paxos的TLA+ spec里面，没有模仿许多通信信道，而是把所有msg放到一个集合(msgs)里面。Send(m)就是修改msgs，使得msgs的新状态为：msgs和{m}的并集。$msg'$表示msg被修改后的状态。
+在Paxos的TLA+ spec里面，没有模拟许多通信信道，而是把所有msg放到一个集合(msgs)里面。Send(m)就是修改msgs，使得msgs的新状态为：msgs和{m}的并集。$msg'$表示msg被修改后的状态。
 
-## 2.2 Phase1b
+## 2.3 Phase1b
 
-Phase1b过程，是Acceptor 根据自己变量去判断，能否响应一个 Phase1a消息，如果符合条件，则恢复一个Phase1b。参数 a代表Acceptor自己的标识。
+Phase1b过程，是Acceptor 根据自己变量去判断，能否响应一个 Phase1a消息，如果符合条件，则响应一个Phase1b。参数 a是Acceptor自己的标识。
+$$
+\begin{split}Phase1b(a) = & \land \exists m \in msgs : \\                  & \qquad \land m.type = "1a"  \land \space m.bal > maxBal[a]\\                  & \qquad \land maxBal' = [maxBal\space EXCEPT \space ![a] = m.bal]\\                  & \qquad \land Send([type |-> "1b", acc |-> a, bal |-> m.bal, \\                  & \qquad\qquad mbal |-> maxVBal[a], mval |-> maxVal[a]])\\              &\land UNCHANGED <<maxVBal, maxVal>>\end{split}
+$$
 
-其中最重要的前提条件是：存在一个 "1a" msg m，m.bal 大于a自己的maxBal。$m.bal > maxBal[a]$。
+
+其中最重要的前提条件是：存在一个 "1a" msg m，m.bal 大于a自己的maxBal。即：
+
+​           $ m.type = "1a" \land \space m.bal > maxBal[a]$。
 
 注意，在前提成立的情况下，Phase1b做了两件事(其他所有变量都是Unchanged)：
 
-1) maxBal做了修改，实际就是：$maxBal[a]' = m.bal$
+1) 把maxBal做了修改，实际就是：$maxBal[a]' = m.bal$;
 
-2) Send了一个 “1b"消息，Send在前面有解释。
-$$
-\begin{split}
-Phase1b(a) = & \land \exists m \in msgs : \\
-                  & \qquad \land m.type = "1a"  \land m.bal > maxBal[a]\\
-                  & \qquad \land maxBal' = [maxBal\space EXCEPT \space ![a] = m.bal]\\
-                  & \qquad \land Send([type |-> "1b", acc |-> a, bal |-> m.bal, \\
-                  & \qquad\qquad mbal |-> maxVBal[a], mval |-> maxVal[a]])\\
-              &\land UNCHANGED <<maxVBal, maxVal>>
-\end{split}
-$$
-**注意：**一旦发送了"1b"，$maxBal[a]$ 就增加了，所以下次收到Ballot Number相同的Phase1a，不会再相应。
+2) 构建 "1b"消息四元组: <"1b", a, m.bal, maxVBal[a], maxBal[a]>。注意如果a从未执行过phase2b，maxVBal[a]就是-1，此时maxBal[a]为空 。
 
-## 2.3 Phase2a
+3) Send  “1b"消息，Send的含义在前面有解释。**注意：**一旦发送了"1b"，$maxBal[a]$ 就增加了，所以下次收到Ballot Number相同的Phase1a，不会再相应。
+
+## 2.4 Phase2a
 
 **前提条件：**
 
 ​      1) 没有发送过bal为b的2a消息(避免重复)；
 
-​       2) 存在一个Quorum Q，里面的每个成员都回复过Phase1b;
+​       2) 存在一个Quorum Q，里面的每个成员都回复过Phase1b。
 
-
-
-**获得val，构建Phase2a消息:**
+**确定val，构建Phase2a消息:**
 
 ​      1) Q1b为该Qurom Q发送的Phase1b消息集合；
 
 ​      2) Q1bv为Q1b中，所有$m.mbal \geq 0$的消息集合；
 
-​      3）如果Q1bv为空，说明Q里面所有成员都没有Accept过任何Value，所以v不用满足任何条件，即proposer自己决定；
+​      3）如果Q1bv为空，说明Q里面所有成员都没有Vote过，所以v由proposer自己决定；
 
-​     4) 如果Q1bv不为空，那么v必须是Q1bv中mbal最大的那个(即Q里面accept过最大的Ballot Number对应的value)。
+​     4) 如果Q1bv不为空，那么v必须是Q1bv中对应mbal最大的那个(即Q里面成员Vote过的最大的Ballot Number对应的value)。
 $$
 \begin{split}
 Ph&ase2a(b, v) =\\ 
@@ -158,25 +146,25 @@ Ph&ase2a(b, v) =\\
 $$
 
 
-## 2.4 Phase2b
+## 2.5 Phase2b
 
-一个Acceptor执行Phase2b的过程，也分为大致以下几个部分。
+​     一个Acceptor执行Phase2b的过程，也分为大致以下几个部分。
 
-### 2.4.1 检查前提条件
+### 检查前提条件
 
-​    存在一个"2a"消息m，满足 $m.bal \geq maxBal[a]$
+​    存在一个"2a"消息m，满足 $m.bal \geq maxBal[a]$。
 
-### 2.4.2 修改本Acceptor的变量
+### 修改本Acceptor的变量
 
- $ maxBal[a]'=m.bal$
+​       $ maxBal[a]'=m.bal$
 
-$ maxVBal[a]' = m.bal] $
+​       $maxVBal[a]' = m.bal] $
 
-$maxVal[a]'= m.val]$
+​       $maxVal[a]'= m.val]$
 
-### 2.4.3 发送"2b"消息(代表Vote)
+### 发送"2b"消息(代表Vote)
 
-   消息带有Acceptor的ID(参数a)，以及"2a"消息m里面的$m.bal$和$m.val$ 。
+   "2b"消息带有Acceptor的ID(参数a)，以及从"2a"消息m里面获取的$m.bal$和$m.val$ 。
 $$
 \begin{split}
 Phase2b(a) = \exists m \in msgs : &\land m.type = "2a"\\
@@ -192,19 +180,19 @@ $$
 
 - 因为执行Phase2b的Acceptor，不一定执行了Phase1b ，所以可能根本没有修改。
 
-# 3. 一些定义
+# 3. 推理相关的函数/不变式定义
 
-
+下面这些定义不是2阶段的一部分，但是对于理解两阶段为什么是对的，却是很重要的。
 
 ## 3.2 基本函数定义
 
-- VotedFor(a, b, v):  Acceptor a曾经投票给选票($b$, $v$)
+- VotedFor(a, b, v):  Acceptor a曾经投票给选票($b$, $v$)；
 
-- ChosenAt(b, v): 存在一个Quorum Q，Q里面每个成员都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值，都是这个含义。
+- ChosenAt(b, v): 存在一个Quorum Q，Q里面每个成员都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是这个含义；
 
-- DidNotVoteAt(a, b):  Acceptor a从未给 BN = b 的选票投票
+- DidNotVoteAt(a, b):  Acceptor a从未给 $BN = b$ 的选票投票；
 
-- CannotVoteAt(a, b)： Acceptor a不能再给任何 BN = b的选举投票，因为maxBal[a] >b并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 实际上允许同一个phase2a 请求重复被应答。
+- CannotVoteAt(a, b)： Acceptor a不能再给任何 $BN = b$的选举投票，因为$maxBal[a] >b$并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 实际上允许同一个phase2a 请求重复被应答。
   $$
   \begin{split}
   VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
@@ -221,13 +209,11 @@ $$
 
 ### 3.2.1 NoneOtherChoosableAt(b, v)
 
-- 定义: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票 (b,v)，要么没有为Ballot b投票，且永远不会为b投票。
+- 意义: 除了v以外，不可能用 Bal b选定其他value。注意：这个谓词公式，并**没有隐含$ChosenAt(b,v)$**为true。
 
-- 意义: 除了 v以外，不可能有任何其他value，可以用Ballot  b被选定
+- 定义/实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票 (b,v)，要么没有为Ballot b投票，且永远不会为b投票。
 
 - 反证：假设不成立，即存在某个Value $w$, $w\ne v$, 并且有ChosenAt(b, w)。则必须有某个 Quorum R，R内所有Acceptor都需要给(b, w)投票，根据Quorum的含义，R必然与 Q有交集，这与前提矛盾。
-
-  
   $$
   \begin{split}
   NoneOtherChoosableAt(b, v) = \\
@@ -241,7 +227,7 @@ $$
 
 - 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。
 
-- 注意：不能选定，**不代表不能Accept**，只是不会形成多数派
+- 注意：不能选定，**不代表不能Accept/Vote**， 只要vote不形成Quorum即可。
 
 - 公式：
 $$
@@ -272,15 +258,15 @@ $$
 
 其中：
 
-- Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何值。
-- Cond 2.1的定义，如果c不等于-1，则有VotedFor(a,c,v)，那么这个Vote发生时已经保证了SafeAt(c,v)；
+- Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何值(因为已经有一个 quorum，其成员不可能在这个Bal区间内Vote)。
+- Cond 2.2的定义，如果c不等于-1，则有VotedFor(a,c,v)，那么这个Vote发生时已经保证了SafeAt(c,v)；
   VotedFor(a,c,v)和OneValuePerBallot，保证了如果Ballot c选定了某个值，那么这个值只能是v，也就是NoneOtherChoosableAt(c, v)；
-- ShowsSafeAt(Q, b, v) 与 SafeAt(b, v)的最大不同点：前者只需要收集Quorum的response，而不需要全部，是个可行的Enabling Condition。
+- ShowsSafeAt(Q, b, v) 与 SafeAt(b, v)的最大不同点：前者只需要收集某个Quorum的response，而不需要全部，是个可行的Enabling Condition。
 
-### 3.2.4 OneValuePerBallot
+### 3.2.4 几个不变式
 
-- 任意2个不同Acceptor，如果给同一Ballot的选票投票，那么Value必须相同
-- 与OneVote的区别是：OneValuePerBallot讨论的是不同的Acceptor
+- 任意两个不同Acceptor，如果给同一Bal的Phase1a选票投票，那么Value必须相同
+- 与OneVote的区别是：OneValuePerBallot讨论的是不同的Acceptor之间的关系：
 
 $$
 \begin{split}
@@ -294,17 +280,15 @@ OneValuePerBallot =
 \end{split}
 $$
 
-
-
 # 4. 归纳推理
 
 ## 4.1 各个消息的隐含的不变式
 
-### Phase1a消息
+### Phase1a消息 $phase1a(b, v)$
 
-无任何保证，随便发送
+- 它本身无任何保证，随便发送。
 
-### 每一条Phase1b消息 $phase1b(a, b_1, v_1)$
+### Phase1b消息 $phase1b(a, b_1, v_1)$
 
 - 这里先不考虑$b_1$为 -1的场景
 
