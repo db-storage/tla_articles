@@ -4,49 +4,51 @@
 
 **初衷**
 
-在理解Paxos的TLA+ Spec过程中，发现其中其实隐含了Paxos正确性的基于不变式的归纳法证明。由于TLA+  spec不易理解，且基本没有高亮显示，所以先抽取其中相对易于理解的部分，用Latex公式表示，并辅以一些图形，希望能抛砖引玉。
+在理解Paxos的TLA+ Spec过程中，发现其中其实隐含了Paxos正确性的基于不变式(Invariance)的归纳法证明。由于TLA+  spec不易理解，且基本没有高亮显示，所以先抽取其中相对易于理解的部分，大部分改用Latex公式表示，并辅以一些图形，希望能抛砖引玉。部分内容仍然是 TLA+格式的，但是近来通过文字或者表格来辅助理解。
 
-这些证明是从Paxos的TLA+ Spec根据自己的理解抽取的，并非新东西。
+这些证明是从Paxos的TLA+ Spec根据自己的理解抽取的，并非新东西，如果有发现不准确的地方，欢迎批评指正。
 
 **为什么要写这么理论化的东西？**
 
-Paoxs已经这么难懂，为什么还要用形式化方法去说理论？形式化后可能是极简的，不一定是复杂的。其实用公式描述很多内容往往更简单，比如：$SafeAt(b,v)$ 表示：不可能用<=b的任何Ballot Number，选定value v以外的任何值。虽然后者意义上也没用问题，但是很容易让人抓不住重点，在推理或者证明时变得极其繁琐。
+Paoxs已经这么难懂，为什么还要用形式化方法去说理论？其实形式化往往是更准确的，在理想情况下可能还是极简的，不一定是复杂的。比如：$SafeAt(b,v)$ 表示：不可能用<=b的任何Ballot Number，选定value v以外的任何值。虽然后者意义上也没用问题，但是很容易让人抓不住重点，而且在做推理或者证明时变得极其繁琐而事实上难以描述。
 
 # 1. 共识 (Consensus)的极简定义
 
-- 集合chosen: 选定的值的集合
+我们先抽取一些必要的变量和常量定义 。这些对于有计算机或者数学基础的读者应该不难 。
 
-- Consensus的定义：被选定的Value个数小于等于1
-  $$
-  Consensus =  Cardinality(chosen) \leq 1
-  $$
-  
+## 1.1 常量和变量定义部分
 
-# 2. Paxos形成共识的两个阶段
+| 名称     | 类型 | 含义                                                         |
+| -------- | ---- | ------------------------------------------------------------ |
+| Acceptor | Set  | 所有接收者的集合                                             |
+| Quorum   | Set  | 里面的每个成员，例如Q1，也是一个Set。且Q1是Acceptor的subset  |
+| maxBal   | Map  | maxBal[a]表示acceptor a响应过的最大Ballot Number，在phase1b修改。只增不减。 |
+| maxVBal  | Map  | Max Voted Ballot。maxVBal[a]表示acceptor a曾经Vote过的最大的Ballot Number，在phase2b修改。只增不减。 |
+| maxVal   | Map  | Max Voted Value。 maxVal[a]表示acceptor a曾经Vote过的最大的Ballot Number对应的Value，在phase2b修改。<"2b", a, maxVBal[a], maxVal[a]>构成了一个Phase2b消息四元组。 |
+| msgs     | Set  | 所有发过的消息集合(在这个验证模型中，msg一直保留)            |
+| Chosen   | Set  | 被选定的Value的集合                                          |
 
-回顾下Paxos的两个阶段：
 
-# 3. 一些定义
-
-## 3.1 常量和变量定义部分
-
-//TODO: 换成表格
 
 ```tla
-------------------------------- MODULE Voting ------------------------------- 
-EXTENDS Integers 
------------------------------------------------------------------------------
-CONSTANT Value,     \* The set of choosable values.
-         Acceptor,  \* A set of processes that will choose a value.
+CONSTANT Acceptor, 
          Quorum     \* The set of "quorums", where a quorum" is a 
                     \*   "large enough" set of acceptors
 CONSTANT Ballot
 
-VARIABLE votes,   \* votes[a] is the set of votes cast by acceptor a
-         maxBal   \* maxBal[a] is a ballot number.  Acceptor a will cast
+VARIABLE maxBal   \* maxBal[a] is a ballot number.  Acceptor a will cast
                   \*   further votes only in ballots numbered \geq maxBal[a]      
+        maxVBal, \* <<maxVBal[a], maxVal[a]>> is the vote with the largest
+         maxVal,    \* ballot number cast by a; it equals <<-1, None>> if
+                    \* a has not cast any vote.
+         msgs     \* The set of all messages that have been sent.
+                  VARIABLE chosen       
+         chosen    \*The set of all values that can be chosen.
 ```
 
+
+
+对Quorum的要求：
 
 $$
 \begin{split}
@@ -59,6 +61,138 @@ THEOREM \space\space QuorumNonEmpty = \\
 &\forall Q \in Quorum : Q \neq \{\} \\
 \end{split}
 $$
+
+感兴趣的读者可以自己计算下，满足上面的式子，Q1, Q2不一定都达到Acceptor的半数以上。
+
+## 1.2 Consensus的定义
+
+- Consensus的定义：chosen的元素小于等于1
+  $$
+  Consensus =  Cardinality(chosen) \leq 1
+  $$
+
+# 2. Paxos的两个阶段回顾
+
+回顾下Paxos的两个阶段，从paxos的 TLA+里面摘取了其公式表示：
+
+## 2.1 Phase1a
+
+Phase1a即Proposer给各个Acceptor发送phase1a消息，参数b为Ballot Number。
+
+**发送Phase1a无需任何前提条件**，直接发送1a消息，它不带有任何承诺。注意1a消息，是一个二元组，可以理解成一个结构体。
+
+UNCHANGED部分是说其他的变量不变。
+$$
+\begin{split}
+Phase1a(b) = &\land Send([type |-> "1a", bal |-> b])\\
+              &\land UNCHANGED <<maxBal, maxVBal, maxVal>>\\
+\end{split}
+$$
+
+
+Send的含义：
+$$
+Send(m) = msgs' = msgs \cup \{m\}
+$$
+在paxos的TLA+ spec里面，没有模仿许多通信信道，而是把所有msg放到一个集合(msgs)里面。Send(m)就是修改msgs，使得msgs的新状态为：msgs和{m}的并集。$msg'$表示msg被修改后的状态。
+
+## 2.2 Phase1b
+
+Phase1b过程，是Acceptor 根据自己变量去判断，能否响应一个 Phase1a消息，如果符合条件，则恢复一个Phase1b。参数 a代表Acceptor自己的标识。
+
+其中最重要的前提条件是：存在一个 "1a" msg m，m.bal 大于a自己的maxBal。$m.bal > maxBal[a]$。
+
+注意，在前提成立的情况下，Phase1b做了两件事(其他所有变量都是Unchanged)：
+
+1) maxBal做了修改，实际就是：$maxBal[a]' = m.bal$
+
+2) Send了一个 “1b"消息，Send在前面有解释。
+$$
+\begin{split}
+Phase1b(a) = & \land \exists m \in msgs : \\
+                  & \qquad \land m.type = "1a"  \land m.bal > maxBal[a]\\
+                  & \qquad \land maxBal' = [maxBal\space EXCEPT \space ![a] = m.bal]\\
+                  & \qquad \land Send([type |-> "1b", acc |-> a, bal |-> m.bal, \\
+                  & \qquad\qquad mbal |-> maxVBal[a], mval |-> maxVal[a]])\\
+              &\land UNCHANGED <<maxVBal, maxVal>>
+\end{split}
+$$
+**注意：**一旦发送了"1b"，$maxBal[a]$ 就增加了，所以下次收到Ballot Number相同的Phase1a，不会再相应。
+
+## 2.3 Phase2a
+
+**前提条件：**
+
+​      1) 没有发送过bal为b的2a消息(避免重复)；
+
+​       2) 存在一个Quorum Q，里面的每个成员都回复过Phase1b;
+
+
+
+**获得val，构建Phase2a消息:**
+
+​      1) Q1b为该Qurom Q发送的Phase1b消息集合；
+
+​      2) Q1bv为Q1b中，所有$m.mbal \geq 0$的消息集合；
+
+​      3）如果Q1bv为空，说明Q里面所有成员都没有Accept过任何Value，所以v不用满足任何条件，即proposer自己决定；
+
+​     4) 如果Q1bv不为空，那么v必须是Q1bv中mbal最大的那个(即Q里面accept过最大的Ballot Number对应的value)。
+$$
+\begin{split}
+Ph&ase2a(b, v) =\\ 
+  & \land \lnot \exists m \in msgs : m.type = "2a" \land m.bal = b\\
+  &  \land \exists Q \in Quorum :\\
+  & \qquad       LET \space Q1b = \{m \in msgs :   \land m.type = "1b"\\
+  &  \qquad \qquad  \qquad  \qquad  \qquad \qquad \quad \land m.acc \in Q\\
+  &  \qquad \qquad  \qquad  \qquad  \qquad \qquad \quad \land m.bal = b \}\\
+  &  \qquad \qquad     Q1bv = \{m \in Q1b : m.mbal \geq 0\}\\
+  & \qquad      IN  \land \forall a \in Q : \exists m \in Q1b : m.acc = a \\
+  & \qquad  \quad \space   \land \lor Q1bv = \{\}\\
+  & \qquad \qquad  \space   \lor \exists m \in Q1bv : \\
+  & \qquad \qquad  \qquad \qquad    \land m.mval = v\\
+  & \qquad \qquad  \qquad \qquad    \land \forall mm \in Q1bv : m.mbal \geq mm.mbal \\
+  &\land Send([type |-> "2a", bal |-> b, val |-> v])\\
+  &\land UNCHANGED <<maxBal, maxVBal, maxVal>>\\
+  \end{split}
+$$
+
+
+## 2.4 Phase2b
+
+一个Acceptor执行Phase2b的过程，也分为大致以下几个部分。
+
+### 2.4.1 检查前提条件
+
+​    存在一个"2a"消息m，满足 $m.bal \geq maxBal[a]$
+
+### 2.4.2 修改本Acceptor的变量
+
+ $ maxBal[a]'=m.bal$
+
+$ maxVBal[a]' = m.bal] $
+
+$maxVal[a]'= m.val]$
+
+### 2.4.3 发送"2b"消息(代表Vote)
+
+   消息带有Acceptor的ID(参数a)，以及"2a"消息m里面的$m.bal$和$m.val$ 。
+$$
+\begin{split}
+Phase2b(a) = \exists m \in msgs : &\land m.type = "2a"\\
+               &\land m.bal \geq maxBal[a]\\
+               &\land maxBal' = [maxBal \space EXCEPT \space ![a] = m.bal] \\
+               &\land maxVBal' = [maxVBal \space EXCEPT \space ![a] = m.bal] \\
+               &\land maxVal' = [maxVal \space EXCEPT \space ![a] = m.val]\\
+               & \land Send([type |-> "2b", acc |-> a,\\
+               &  \qquad \qquad   bal |-> m.bal, val |-> m.val]) 
+\end{split}
+$$
+**FAQ: 为什么我还需要修改 $maxBal[a]'$?** 
+
+- 因为执行Phase2b的Acceptor，不一定执行了Phase1b ，所以可能根本没有修改。
+
+# 3. 一些定义
 
 
 
@@ -221,7 +355,7 @@ $$
 
 
 
-## 4.4 还在担心并发导致的问题？
+## 4.4 还在纠结并发导致的问题？
 
 假设在Propser p1顺利完成了phase1a，收到了了某个quorum Q1内所有成员的phase1b消息，然后发送phase2a消息$phase2a(b,v)$，但是在p1收到phase2b消息之前，另外一个proposer p2开始了phase1。我们假设p2使用的Ballot Number  $b'$。
 
@@ -393,22 +527,7 @@ $$
 
 
 
-- 对于Paxos，实际上从两方面保证：1) 不同的Proposer可用的Ballot Number是不同的；2) 同一Proposer，在使用同一个Ballot Number发送Phase2a时，不会修改Value。
-
-### 3.5.4 有了Voting.tla，为什么还需要Paxos?
-
-- Voting是纯粹的理论和推理，描述了要做到Consensus，需要保证什么。其中很多内容没有考虑具体实现，例如，VoteFor里面的判断所有Acceptor状态、投票都认为是原子操作。但是实际不可能让别的Acceptor停下来，等待自己干完活。
-
-- Paxos描述如何实现，基于分布式系统和消息通信机制。
-
-
-### 3.5.5 Voting.tla 里有没有类似于Phase1的操作？
-
--  IncreaseMaxBal比较接近。但是非常简要，纯数学抽象表示，没有描述消息过程。
-
-- 如果没有IncreaseMaxBal这个步骤，那么就没法取得进展了。因为 ShowsSafeAt就需要各个Acceptor的 maxBal[a]>=b，就是隐含执行了phase1a。
-
-
+- 对于Paxos，实际上从两方面保证：1) 不同的Proposer可用的Ballot Number是不同的；2) 同一Proposer，在使用同一个Ballot Number发送Phase2a时，不会修改Value。3) 如果用同一个Ballot Number执行两次Phase1，那么第二次时
 
 
 
