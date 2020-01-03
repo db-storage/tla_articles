@@ -357,7 +357,7 @@ $$
 
   
 
-  ![2a](https://github.com/db-storage/tla_articles/blob/WIP/Figures/Phase2a.png?raw=true)
+  ![2a](Figures/Phase2a.png)
 
   
 
@@ -421,7 +421,7 @@ $$
 
 ## 4.4 一张图说明推导过程
 
-  ![allinone](https://github.com/db-storage/tla_articles/blob/WIP/Figures/AllInOne.png?raw=true)
+  ![allinone](Figures/AllInOne.png)
 
 
 
