@@ -1,4 +1,4 @@
-#  Paxos的归纳法推理-(从TLA+ Spec抽取)
+#  从TLA+ Spec看Paxos的正确性推导
 
 ---
 
@@ -123,13 +123,13 @@ $$
 
 **确定val，构建Phase2a消息:**
 
-​      1) Q1b为该 Q发送的Phase1b消息集合；
+​      1) 定义临时变量Q1b为该 Q发送的Phase1b消息集合；
 
-​      2) Q1bv是Q1b中，所有$m.mbal \geq 0$的消息集合；
+​      2) 定义临时变量Q1bv为Q1b中，所有$m.mbal \geq 0$的消息集合；
 
 ​      3) 如果Q1bv为空，说明Q里面所有成员都没有Vote过，所以v由proposer自己决定；
 
-​     4) 如果Q1bv不为空，那么v必须是Q1bv中对应mbal最大的那个(即Q里面成员Vote过的最大的Ballot Number对应的value)。这个式子稍微复杂，但意义明确。
+​     4) 如果Q1bv不为空，那么v必须是Q1bv中对应mbal最大的那个(即Q里面成员Vote过的最大的Ballot Number对应的value)。
 $$
 \begin{split}
 Ph&ase2a(b, v) =\\ 
@@ -198,7 +198,7 @@ $$
 
 - DidNotVoteAt(a, b):  Acceptor a从未给 $Bal = b$ 的选票投票；
 
-- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票，因为$maxBal[a] >b$并且DidNotVoteAt(a, b)。 为什么需要 DidNotVoteAt? 实际上允许同一个phase2a 请求重复被应答。
+- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票，因为$maxBal[a] >b$并且DidNotVoteAt(a, b)。 
   $$
   \begin{split}
   VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
@@ -213,7 +213,20 @@ $$
   $$
   
 
-### 3.2.1 NoneOtherChoosableAt(b, v)
+
+
+#### FAQ: 为什么需要CannotVoteAt里面要包含 DidNotVoteAt?
+
+- 如果没有DidNotVoteAt，假设有个v和 Q1，满足： 
+  $$
+  \begin{split}
+  \exists  v \in Values, Q_1 \in &Quorum: \\ 
+  &\forall a \in Q_1: VotedFor(a, b, v) \land maxBal[a]>b
+  \end{split}
+  $$
+  即Q1里面的成员虽然现在不能再VoteFor(b, v)，但是之前已经都Vote过了，那么可能$ChosenAt(b,v)$早已经为true。
+
+### 3.2.1  NoneOtherChoosableAt(b, v)
 
 $$
 \begin{split}
@@ -228,6 +241,10 @@ $$
 - 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经Vote了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
 - 反证：假设存在某个Value $w$, $w\ne v$, 有ChosenAt(b, w)。则必须有某个 Quorum R，满足： $\forall a \in R, VotedFor(a, b, w)$，根据Quorum的含义，R必然与 Q有交集，假设这个交集包含 acceptor $a_1$，那么有: $a_1: a_1 \in Q VotedFor(a_1, b, w)$这与前提矛盾。
 
+**FAQ**: 为什么$NoneOtherChoosableAt(b,v)$不是$NoneOtherChoosableAt(a, b, v)$?
+
+因为NoneOtherChoosableAt是个全局概念，不是某个Acceptor的承诺，而是纵观所有acceptor，$(b, v)$之前一定没有被选定，将来也不会被选定 。
+
 ### 3.2.2 SafeAt(b, v)
 
 - 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的Bal范围定义到到一个区间$[0, b-1]$.
@@ -240,8 +257,7 @@ $$
   SafeAt(b, v) &= \\ 
   &\forall c \in 0..(b-1) : NoneOtherChoosableAt(c, v)
   \end{split}
-  $$
-  
+$$
 
 ### 3.2.3 ShowsSafeAt(Q, b, v)
 
@@ -305,11 +321,16 @@ $$
 - a不会再响应 $Bal <= m.bal$的Phase1a；
 - a不会Accept任何 $Bal <m.bal$的Phase2a，即 $\forall x \in [maxVBal[a]+1, b-1]: CannotVoteAt(a,x)$， 如果$maxVBal[a]=-1$，就变成： $\forall x \in [0, b-1]: CannotVoteAt(a,x)$;
 
-- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxVBal[a], maxBal[a])$  ，它隐含了$SafeAt(maxVBal[a], maxBal[a])$；
-
+- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxBal[a], maxVBal[a])$  ，它隐含了$SafeAt(maxBal[a], maxVBal[a])$；
 - 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a； 
 
-  
+为了便于描述，我们定义另外一个式子：
+$$
+\begin{split} CannotVoteBetween(a, start, end) &= \\   &\forall x \in [start+1, end-1]: CanntVoteAt(a, x) \end{split}
+$$
+**Phase1b实际上隐含了**：
+
+​                 $CannotVoteBetween(a, maxVBal[a], b) \land SafeAt(maxBal[a], maxVBal[a])$  
 
 ### Phase2a消息 $phase2a(b, v)$ :
 
@@ -317,10 +338,6 @@ $$
 
   ShowsSafeAt(Q, b, v)是Proposer在发现收到了某个Quorum Q的所有成员的Phase1b后，计算出来一个新的Value v，并且认为$phase2a(b, v)$是安全的。
 
-  为了便于描述，我们定义另外一个式子：
-  $$
-  \begin{split} CannotVoteBetween(a, start, end) &= \\   &\forall x \in [start+1, end-1]: CanntVoteAt(a, x) \end{split}
-  $$
   下面是一个例子，假设某个quorum Q包含了$a_1, a_2, a_3$这三个 Acceptor，它们回复的Phase1b四元组分别为$<b, a_1, b_1, v_1>, <b, a_2, b_2, v_2>, <b, a_3, b_3, v_3>$。那么$Phase1b(a_1)$ 隐含了 : 
   $$
   maxBal[a] \geq b \land CannotVoteBetween(a1, b1, b) \land SafeAt(b1, v1)，
@@ -352,11 +369,13 @@ $$
 
 ### Phase2b消息$phase2b(a, b, v)$：
 
-- $VoteFor(a, b, v) => SafeAt(b,v)$
+- 没有隐含的承诺
 
 
 
 ## 4.3 基于不变式的推导
+
+前面的$ShowSasfAt(Q, b, v)$是如何的出来的？
 
 我们总结下上面的步骤可以发现: Phase1a不会影响正确性，Phase1b是Acceptor根据自己的局部信息在做决策；Phase2a是最复杂的，它根据各个Acceptor的反馈在做决策，而这些Acceptor的状态是变化的(起码maxBal可能变化)；Phase2b 实际上也是各个Acceptor根据局部信息在做决策。
 
@@ -398,7 +417,13 @@ $$
 $$
 那么在区间$[b_1+1, b-1]$就不可能选定任何Value，因为任意两个Quorum都是相交的。
 
-## 4.4 再分析下并发场景
+
+
+## 4.4 一张图说明推导过程
+
+
+
+# 5 再分析下并发场景
 
 简单来说，如果一轮未能进入Phase2的过程(Phase1b未构成Quorum)，不够成任何value的选定，不可能影响chosen的值。所以我们跳过这种问题。只有进入phase2a的过程，才有可能导致value被选定，才会影响Consensus。也就是说，无休止的重试是合法的。
 
@@ -414,6 +439,8 @@ $$
 - **场景二:** 场景一以外的其他情况，即：对于任何一个Quorum Q, Q里至少有一个acceptor，先处理了p2的phase1a，然后才处理p1的phase2a。先处理p2的$phase1a(b')$的acceptor a, maxBal[a] 变成了 $b'$，所以不会Accept phase2a(b, v)，导致<b, v>无法被选定，因为根本不够成Quorum。既然$(b,v)$不可能被选定，不影响chosen的值。 p2的执行过程，跟p1是一样的。
 
  把上面例子中的p2换成p2, p3等多个，且对应的Bal都大于b，那么分析过程也是结论是类似的。
+
+
 
 
 
