@@ -318,19 +318,19 @@ $$
 
 ### Phase1b消息$<"1b", a, b, maxVBal[a], maxBal[a]>$：
 
-- a不会再响应 $Bal <= m.bal$的Phase1a；
-- a不会Accept任何 $Bal <m.bal$的Phase2a，即 $\forall x \in [maxVBal[a]+1, b-1]: CannotVoteAt(a,x)$， 如果$maxVBal[a]=-1$，就变成： $\forall x \in [0, b-1]: CannotVoteAt(a,x)$;
-
-- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxBal[a], maxVBal[a])$  ，它隐含了$SafeAt(maxBal[a], maxVBal[a])$；
-- 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a； 
+- 记录了$maxBal[a]'=b$，**承诺**a不会再响应 $Bal <= m.bal$的Phase1a，**承诺**a不会Accept任何 $Bal <m.bal$的Phase2a;
+- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxBal[a], maxVBal[a])$  ，它**如实转达**了$SafeAt(maxBal[a], maxVBal[a])$；我们认为，如实转达也是一种承诺，参见phase2b描述。
+- 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a，这仅仅是个特例； 
 
 为了便于描述，我们定义另外一个式子：
 $$
 \begin{split} CannotVoteBetween(a, start, end) &= \\   &\forall x \in [start+1, end-1]: CanntVoteAt(a, x) \end{split}
 $$
-**Phase1b实际上隐含了**：
+**因此，Phase1b实际上隐含了**：
 
 ​                 $CannotVoteBetween(a, maxVBal[a], b) \land SafeAt(maxBal[a], maxVBal[a])$  
+
+其中前一部分是a的承诺，后面的SafeAt是转达。
 
 ### Phase2a消息 $phase2a(b, v)$ :
 
@@ -363,19 +363,20 @@ $$
 
 - $OneValuePerBallot$
 
-  不同的Proposer，不会用相同的Ballot Number；即使同一个Proposer用相同的Bal，执行两次phase1，不会两次都能收到Quorum的响应(因为执行Phase1b(a)后，maxBal[a]被增加了)。
+  不同的Proposer，不会用相同的Ballot Number；如果同一个Proposer用相同的Bal执行两次phase1，不会两次都能收到Quorum的响应(因为执行Phase1b(a)后，maxBal[a]被增加了)。
 
   
 
 ### Phase2b消息$phase2b(a, b, v)$：
 
-- 没有隐含的承诺
+- 记录了$maxBal[a]'=b$，具体承诺内容参见Phase1b的相应描述。如果这个acceptor正好也发送过对应的phase1b，那么已经承诺过。
+- 记录了$maxVBal[a]'=b, maxVal[a]=v'$，按照前面的讨论，这个式子隐含了$SafeAt(b, v)$。这个记录也表示**承诺会如实转达**给后续Bal 更大的Phase1请求。
 
 
 
 ## 4.3 基于不变式的推导
 
-前面的$ShowSasfAt(Q, b, v)$是如何的出来的？
+前面的$ShowSasfAt(Q, b, v)$是如何得出来的？
 
 我们总结下上面的步骤可以发现: Phase1a不会影响正确性，Phase1b是Acceptor根据自己的局部信息在做决策；Phase2a是最复杂的，它根据各个Acceptor的反馈在做决策，而这些Acceptor的状态是变化的(起码maxBal可能变化)；Phase2b 实际上也是各个Acceptor根据局部信息在做决策。
 
