@@ -1,4 +1,4 @@
-#  从TLA+ Spec看Paxos的正确性推导
+#  Paxos背后的数学
 
 ---
 
@@ -18,8 +18,12 @@ Paoxs已经这么难懂，为什么还要用偏理论的方法去说理论？其
 
 - Consensus的定义：chosen的元素个数小于等于1。chosen是个集合，下面会提到。
   $$
+  \begin{split}
   Consensus =  Cardinality(chosen) \leq 1
+  \end{split}
   $$
+
+//TODO: chosen的修改如何体现？使用TLA+的概念太复杂
 
 # 2. Paxos的两个阶段回顾
 
@@ -87,7 +91,9 @@ Phase1a(b) = &\land Send([type |-> "1a", bal |-> b])\\
 $$
 Send的含义：
 $$
+\begin{split}
 Send(m) = msgs' = msgs \cup \{m\}
+\end{split}
 $$
 在Paxos的TLA+ spec里面，没有模拟许多通信信道，而是把所有msg放到一个集合(msgs)里面，通过type和bal来区分。Send(m)就是修改msgs，使得msgs的新状态为：msgs和{m}的并集。$msg'$表示msg被修改后的状态。
 
@@ -162,9 +168,9 @@ $$
 
 ​       $ maxBal[a]'=m.bal$
 
-​       $maxVBal[a]' = m.bal] $
+​       $maxVBal[a]' = m.bal $
 
-​       $maxVal[a]'= m.val]$
+​       $maxVal[a]'= m.val$
 
 ### 发送"2b"消息(即Vote)
 
@@ -253,9 +259,9 @@ $$
 
 - 公式：
 $$
-  \begin{split}
+\begin{split}
   SafeAt(b, v) &= \\ 
-  &\forall c \in 0..(b-1) : NoneOtherChoosableAt(c, v)
+  &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)
   \end{split}
 $$
 
@@ -319,8 +325,8 @@ $$
 ### Phase1b消息$<"1b", a, b, maxVBal[a], maxBal[a]>$：
 
 - 记录了$maxBal[a]'=b$，**承诺**a不会再响应 $Bal <= m.bal$的Phase1a，**承诺**a不会Accept任何 $Bal <m.bal$的Phase2a;
-- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxBal[a], maxVBal[a])$  ，它**如实转达**了$SafeAt(maxBal[a], maxVBal[a])$；我们认为，如实转达也是一种承诺，参见phase2b描述。
-- 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a，这仅仅是个特例； 
+- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxBal[a], maxVBal[a])$  ，它**如实转达**了$SafeAt(maxBal[a], maxVBal[a])$；我们认为，如实转达也是一种承诺，参见phase2b描述；
+- 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a，这仅仅是个特例；
 
 为了便于描述，我们定义另外一个式子：
 $$
@@ -336,30 +342,32 @@ $$
 
 - $ShowSasfAt(Q, b, v)$
 
-  ShowsSafeAt(Q, b, v)是Proposer在发现收到了某个Quorum Q的所有成员的Phase1b后，计算出来一个新的Value v，并且认为$phase2a(b, v)$是安全的。
+  ShowsSafeAt(Q, b, v)是Proposer在收到了某个Quorum Q的所有成员的Phase1b后，推导出Value v，并且$phase2a(b, v)$是安全的。
 
   下面是一个例子，假设某个quorum Q包含了$a_1, a_2, a_3$这三个 Acceptor，它们回复的Phase1b四元组分别为$<b, a_1, b_1, v_1>, <b, a_2, b_2, v_2>, <b, a_3, b_3, v_3>$。那么$Phase1b(a_1)$ 隐含了 : 
   $$
-  maxBal[a] \geq b \land CannotVoteBetween(a1, b1, b) \land SafeAt(b1, v1)，
+  \begin{split}
+  maxBal[a] \geq b \land CannotVoteBetween(a1, b1, b) \land SafeAt(b1, v1)
+  \end{split}
   $$
   
-  
+
   ![2a](Figures/Phase2a.png)
+
   
-  
-  
+
   其他几个也类似。假设$ b_1>=b_2>=b_3$且b1>-1，那么我们得出：                          
   $$
   \begin{split}
   &\land SafeAt(b1, v1) \\
-&\land \forall a \in Q: \\
+  &\land \forall a \in Q: \\
   & &\land maxBal[a] \geq b \\
-& &\land CannotVoteBetwwn(a, b1, b)
+  & &\land CannotVoteBetwwn(a, b1, b)
   \end{split}
-$$
+  $$
   如果取$c = b_1$，那么可以得出   $ShowsSafeAt(Q, b, v)$，具体推导间下一节。
 
-  考虑特殊情况，$b_1=b_2=b_3=-1$，那么取$c=-1$，也能满足  $ShowsSafeAt(Q, b, v)$。
+  考虑特殊情况，$b_1=b_2=b_3=-1$，那么取$c=-1$，由于$[0,b-1]$区间不可能选定任何Value，所以无论给定的v是什么，都能满足  $ShowsSafeAt(Q, b, v)$。
 
 - $OneValuePerBallot$
 
@@ -374,7 +382,7 @@ $$
 
 
 
-## 4.3 Proposer如何推导？
+## 4.3 Proposer如何推导出正确的Value？
 
 前面的$ShowSasfAt(Q, b, v)$是如何得出来的？
 
@@ -382,22 +390,22 @@ $$
 
 注意，Proposer在 **Phase2a推导的v，已经决定了SafeAt(b, v)的成立，它的成立跟是否收到Phase2b无关**，如果一个 Acceptor a拒绝了 Phase2a，那么是因为$maxBal[a]>b$，而SafeAt(b, v)考察的是 $ < b$的那部分Bal。
 
-### 4.3.1 划分三个区间
+### 4.3.1 把Ballot Number划分三个区间
 
 继续按照上面的例子来思考，我们可以把 $<=b$ 的Bal分为三个区间：
 
-$[0, b_1-1], [b_1+1, b-1]$
+$[0, b_1-1], [b_1, b_1], [b_1+1, b-1]$
 
-假设一个Acceptor收到了一个Phase2a，它如何确认自己可以安全地Vote呢？能否保证$SafeAt(b, v)$  回顾下SafeAt的式子：
+假设一个Acceptor收到了一个Phase2a，它如何确认自己可以安全地Vote呢？能否保证$SafeAt(b, v)$?  回顾下$SafeAt$的式子，它需要保证整个区间都满足 NoOtherChoosable。
 $$
 \begin{split}
 SafeAt(b, v) &= \\ 
-&\forall c \in 0..(b-1) : NoneOtherChoosableAt(c, v)
+&\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)
 \end{split}
 $$
 ### 4.3.2 分区间推导
 
-我们分三个区间来讨论：
+以下分别得出三个区间的NoneOtherChoosableAt。
 
 #### (A). 区间$[0, b_1-1]$
 
@@ -407,34 +415,60 @@ $$
 
 这个单值区间只有$b_1$，基于下面的式子推理： 
 $$
-OneValuePerBallot \land VotedFor(a_1, b_1, v_1) =>\\
-    \qquad  \qquad   \qquad  \qquad  \qquad  NoneOtherChoosableAt(b_1, v_1)
+\begin{split}
+OneValuePerBallot \land VotedFor(a_1, b_1, v_1) &=>\\
+    &  NoneOtherChoosableAt(b_1, v_1)
+\end{split}
 $$
 
 #### (C). 区间$[b_1+1, b-1]$
 
 $ShowsSafeAt(Q, b, v)$已经说明
 $$
-\exist Q \in Quorum: \\
-   \qquad \qquad \forall a \in Q: CannotVoteBetween(a, b_1, b)
+\begin{split}
+\exist Q \in Quorum &: \\
+   &\qquad \forall a \in Q: CannotVoteBetween(a, b_1, b)
+   \end{split}
 $$
 而$b_1$是最大值，那么在区间$[b_1+1, b-1]$上上图中灰色区间的最短部分(公共部分)，就不可能选定任何Value，因为任意两个Quorum都是相交的。
 
 
 
-## 4.4 一张图说明整体过程
+## 4.4 算法正确性
 
-下面一张图较完整低说明了两阶段的过程。为了方便，只画出了两个acceptor a1和a2。注意橙色底色的是隐含的承诺/转达。图中没有体现一些变量的变化。这里假设 {a1, a2}构成了一个quorum，且$b1>b2$，P0在收到两个 phase1b后，就可以推导出SafeAt(b, v1)。
+### 4.4.1 几个不变式
+
+- $Phase2a(b, v)$已经隐含了$SafeAt(b, v)$成立；
+- 任何一个$ChosenAt(b,v)$必然有一个对应的 $Phase2a(b, v)$。
+
+### 4.4.2 反证
+
+假设上述的 Paxos算法不正确，会选定两个不同的Value，即$ChosenAt(b_1, v_1)$和$ChosenAt(b_2, v_2)$都为 true。根据上面描述的不变式，必然有：$Phase2a(b_1, v_1) \land Phase2a(b_1, v_1)$为 true。我们假设$b_1>b_2$。
+
+那么$Phase2a(b_1, v_1) =>SafeAt(b_1, v_1)$，即
+$$
+\begin{split}
+SafeAt(b_1, v_1) &= \\ 
+&\forall c \in [0,(b_1-1)] : NoneOtherChoosableAt(c, v_1)
+\end{split}
+$$
+由于$b_2 \in [0, b_1-1]$，所以有$NoneOtherChoosableAt(b_2, v_1)$成立，这与$ChosenAt(b_2,v_2)$矛盾。
+
+$b_1=b_2$是另外一个问题，前面描述的OneVotePerBallot已经保证了它不会出现。
+
+## 4.5 一张图回顾下整体过程
+
+下面一张图较完整低说明了两阶段的过程，主要强调各个消息的含义。为了方便，只画出了两个acceptor $a_1, a_2$。注意橙色底色的是消息隐含的承诺/转达。为了简化，图中没有体现一些变量的变化(例如$maxBal$。这里假设 $\{a1, a2\}$是一个Quorum，且$b1>b2$，P0在收到两个 phase1b后，就可以推导出$SafeAt(b, v_1)$。
 
   ![allinone](Figures/AllInOne.png)
 
 # 5 一些FAQ
 
-## 5.1 分析下 典型的并发场景？
+## 5.1 分析下典型的并发场景？
 
-简单来说，如果一轮未能进入Phase2的过程(Phase1b未构成Quorum)，不够成任何value的选定，不可能影响chosen的值。所以我们跳过这种问题。只有进入phase2a的过程，才有可能导致value被选定，才会影响Consensus。也就是说，无休止的重试是合法的。
+简单来说，如果一个proposal未能进入Phase2(比如Phase1b未构成Quorum)，不够成任何value的选定，不可能影响chosen的值。所以我们跳过这种问题。只有进入Phase2a的过程，才有可能导致value被选定。
 
-假设Propser p1顺利完成了phase1，收到了某个quorum Q1内所有成员的phase1b消息，然后发送phase2a$phase2a(b,v)$。但是在p1收齐某个Quorum Q2的phase2b之前，另外一个proposer p2开始了phase1。我们假设p2使用的Ballot Number  $b'$。
+假设Proposer p1顺利完成了Phase1，收到了某个quorum Q1内所有成员的Phase1b消息，然后发送$phase2a(b,v)$。但是在p1收齐某个Quorum Q2的phase2b之前，另外一个proposer p2开始了phase1。我们假设p2使用的Ballot Number  $b'$。分两种情况：
 
 ### 假设:  $b'<b$
 
@@ -447,19 +481,19 @@ $$
 
  把上面例子中的p2换成p2, p3等多个，且对应的Bal都大于b，那么分析过程也是结论是类似的。
 
-## 5.2 假设程序一直运行，有一个未形成共识的$Phase2a(b_1, v_1)$，如果将来形成共识，value会是$v_1$么？
+## 5.2 有一个未形成共识的$Phase2a(b_1, v_1)$，如果将来形成共识，value会是$v_1$么？
 
-不一定，假设只有一个acceptor响应了这个phase2a，然后它宕机了，其他节点形成了共识，仿佛这个phase2a没发生过。
+不一定，假设只有$a_1$ vote了这个phase2a，然后$a_1$ 宕机了，其他节点形成了共识，就仿佛这个phase2a没发生过。
 
 ## 5.3 如果有多个未形成共识的Phase2?
 
-假设一共有5个acceptor ${a1, a2, a3, a4, a5}$，$VotedFor(a_1,b_1,v_1)$, $ VotedFor(a_2,b_2, v_2)$ 和 $VotedFor(a_3,b_3, v_3)$都是true，且$b_1 \neq b_2 \neq b_3$,  $v_1\neq v_2  \neq v_3$,a4和a5没有Vote过，如果将来形成共识，value会是哪个？
+假设一共有5个acceptor ${a1, a2, a3, a4, a5}$，$VotedFor(a_1,b_1,v_1)$, $ VotedFor(a_2,b_2, v_2)$ 和 $VotedFor(a_3,b_3, v_3)$都成立，且$b_1 \neq b_2 \neq b_3$,  $v_1\neq v_2  \neq v_3$，$a_4, a_5$都没有Vote过，如果将来形成共识，value会是哪个？
 
-假设有个更大的Bal $b_x$, 它的Phase1只有$a_1, a_4, a_5$参加了，并形成共识，那么选定的就是$v_1$。
+1） 假设有个更大的Bal $b_x$, 它的Phase1只有$a_1, a_4, a_5$参加了，并形成共识，那么选定的就是$v_1$。
 
-如果$a_1, a_2$都参加了$b_x$的Phase1，那么就根据$b_1, b_2$的最大值来决定，选取谁的Value。参见前面的推导过程。
+2） 如果$a_1, a_2$都参加了$b_x$的Phase1，那么就根据$b_1, b_2$的最大值来决定，选取相应的Value。参见前面的推导过程。
 
-**思考题**：按照这个例子，会不会出现4个Acceptor，分别Vote了不同的Value(可以是不同的Ballot)? 为什么？
+**思考题**：会不会出现4个Acceptor，分别Vote了不同的Value(可以是不同的Ballot)? 为什么？
 
 
 
