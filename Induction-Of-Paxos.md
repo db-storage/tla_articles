@@ -1,20 +1,22 @@
-#  Paxos背后的数学
+#  觉得Paxos是对的但不知道为什么？探讨下Paxos背后的数学
 
 ---
 
 **前言**
 
-在理解Paxos的TLA+ Spec过程中，发现其中其实隐含了Paxos正确性的基于不变式(Invariance)的推理。由于TLA+  spec不易理解，且基本没有高亮显示，所以先抽取其中相对易于理解的部分，大部分改用Latex公式表示，并辅以图形和文字，希望能抛砖引玉。部分内容仍然是 TLA+格式的，但是近来通过文字或者表格来辅助理解。
+Paxos是著名的共识协议，但是同样也以难懂著称。即使是简化版的"Paxos Made Simple"一文[1]，把Paxos的两个阶段描述的比较具体，但是很多人仍然有疑惑。很多读者的感受是：觉得应该是对的，但是不知道为什么是对的。
 
-这些内容是从Paxos的TLA+ Spec根据自己的理解抽取和组织的，并非新东西，如果有发现不准确的地方，欢迎批评指正。Lamport在讲座[2]中，基本按照这个Spec讲解过。
+在理解Paxos的TLA+ Spec [3] (一种形式化验证)的过程中，发现其中隐含了对于Paxos正确性的基于不变式(Invariance)的归纳推理。由于TLA+  spec不易理解，且基本没有高亮显示，所以先抽取一部分必要的、相对易于理解的部分，大部分改用Latex公式表示，并辅以图形和文字，来理解为什么它是正确的。部分内容仍然是 TLA+格式的，但是尽量通过文字或者表格来辅助理解。希望能抛砖引玉。
 
-Paoxs已经这么难懂，为什么还要用偏理论的方法去说理论？其实形式化往往是更准确的，在理想情况下可能还是极简的，不一定是复杂的，并且更容易理解根本。比如：$SafeAt(b,v)$ 表示：”不可能用<b的任何Ballot Number，选定value v以外的任何值“。虽然后者意义上也没用问题，但是太繁琐，而且在做推理或者证明时变得极其繁琐而事实上难以描述，而大部分人在描述协议过程时，不会想到这么个概念，以及它有多重要。
+这些内容是从Paxos的TLA+ Spec根据自己的理解抽取和组织的，并非新东西，如果有发现不准确的地方，欢迎批评指正。Lamport在2019年的一个系列讲座[2]中，也讲解过这个Spec。
 
-理解本文的关键在于：理解投票安全性的含义，即一个Acceptor为某个$<b, v>$投票时，需要确认是安全的，那么安全的含义是什么? 就是：不可能有人用小于b的Ballot Number选定v以外的值。注意，这个保证实际上是向更小的Ballot Number看的，**保证更小的Ballot Number需要满足某个条件**，**而不需要保证更大的Ballot Number怎么样**。这个保证是Paxos协议运行过程中重要的不变式，其正确性也基于这个不变式。
+Paoxs已经这么难懂，为什么还要用偏形式化的方法去说起推理？个人的观点是：这个东西本身是严格的，不形式化难以确信是对的；其实形式化往往是更准确的，在有些情况下可能还是极简的，不一定是复杂的，并且更容易理解根本。比如：$SafeAt(b,v)$ 表示：”不可能用小于b的任何Ballot Number，选定value v以外的任何值“。虽然文字描述在意义上也没用问题，但是太繁琐，而且在做推理或者证明时变得难以描述。
 
-# 1. 共识 (Consensus)的极简定义
+理解本文的关键在于：理解投票安全性的含义，即上面的$SafaAt(b,v)$。注意，这个保证实际上是向更小的Ballot Number看的，**保证更小的Ballot Number需要满足某个条件**，**而不需要保证更大的Ballot Number怎么样**。这个保证是Paxos协议运行过程中重要的不变式，其正确性也基于这个不变式。
 
-## 1.1 Consensus的定义
+# 1. "对的" 是啥含义？
+
+我们总觉得Paxos是”对的“，但是不知道为什么它是对的。那么啥叫”对的“？我们先看下Consensus的本身的定义：
 
 - Consensus的定义：chosen的元素个数小于等于1。chosen是个集合，下面会提到。
   $$
@@ -23,15 +25,24 @@ Paoxs已经这么难懂，为什么还要用偏理论的方法去说理论？其
   \end{split}
   $$
 
-这里我们借用下式子描述定义，但是不会涉及chosen的赋值，实际在Spec中也没用显式赋值，而是根据Phase2b消息计算出来的。
+这里我们借用下式子描述定义，但是不会涉及chosen的赋值，实际在Spec中也没用显式赋值，而是根据Phase2b消息动态计算出来的。
+
+所谓**”对的“**，就是满足Consensus自身的定义，即不会选定$\ge2$个值。展开一下：
+
+- 没选定任何Value是对的；
+- 选定了一个Value是对的；
+- 多次选定同一个Value也是对的；
+- 选定了两个或者多个不同的Value，是错误的。
+
+注意这里描述的是基本paxos，相当于multi paxos里面的单个Instance。多个Instance当然可以选定多个值。在本文最后会简单说下multi paxos。
 
 # 2. Paxos的两阶段回顾
 
-这一部分回顾下"Paxos Made Simple"一文的描述的Paxos的两个阶段，从paxos的 TLA+ Spec里面摘取了相应的公式表示。
+这一部分回顾下"Paxos Made Simple"一文的描述的Paxos的两个阶段。但是从具体形式上，使用了公式化描述。这些公式来自[3]。
 
 ## 2.1 常量和变量定义部分
 
-我们先抽取一些必要的变量和常量定义 。这些对于有计算机或者数学基础的读者应该不难 。其中常量是需要预先给定值的。
+我们先抽取一些必要的变量和常量定义 ，Set和Map跟编程语言中场景概念相同。这些对于有计算机或者数学基础的读者应该不难 。其中常量是需要预先给定值的。
 
 | 名称     | 类型 | 含义                                                         |
 | -------- | ---- | ------------------------------------------------------------ |
@@ -72,9 +83,9 @@ $$
 \begin{split}ASSUME\space\space QuorumAssumption =\\ & \land \forall Q \in Quorum : Q \subseteq Acceptor\\                           &\land  \forall Q1, Q2 \in Quorum : Q1 \cap Q2 \neq \{\}  \\THEOREM \space\space QuorumNonEmpty = \\ &\forall Q \in Quorum : Q \neq \{\} \\\end{split}
 $$
 
-感兴趣的读者可以自己计算下，要满足上面的式子，Q1, Q2的成员个数不一定都需要达到Acceptor的半数以上，它们的成员个数不一定是相等的。虽然在实际应用中都简化为多数派。
+感兴趣的读者可以自己计算下，要满足上面的式子，Q1, Q2的成员个数不一定都需要达到Acceptor的半数以上，它们的成员个数也不一定是相等的。虽然在实际应用中都简化为多数派。
 
-约定：在后面的很多式子中，我们经常用到逻辑与$\land$和逻辑或$\lor$，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$，这一点对于状态变更很重要，因为只有条件成立才执行某个动作，而整体用一个逻辑表达式来表示。。
+约定：在后面的很多式子中，我们经常用到逻辑与$\land$和逻辑或$\lor$，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$，这一点对于状态变更很重要，因为只有条件成立才执行某个动作，而整体用一个逻辑表达式来表示。
 
 ## 2.2 Phase1a
 
@@ -82,7 +93,7 @@ Phase1a即Proposer给各个Acceptor发送phase1a消息，参数b为Ballot Number
 
 **发送Phase1a无需任何前提条件**，直接发送1a消息，它不带有任何承诺。注意1a消息，是一个二元组，可以理解成一个结构体。
 
-”UNCHANGED“是TLA+ spec的语法，说名某些变量不变，保留这些只是为了保持完整性，读者可以忽略这些“UNCHANGED” 部分。
+”UNCHANGED“是TLA+ spec的语法，说名某些变量不变，保留这些只是为了保持式子的完整性，读者可以忽略这些“UNCHANGED” 部分。
 $$
 \begin{split}
 Phase1a(b) = &\land Send([type |-> "1a", bal |-> b])\\
@@ -506,11 +517,33 @@ $b_1=b_2$是另外一个问题，前面描述的OneVotePerBallot已经保证了�
 
 **思考题**：会不会出现4个Acceptor，分别Vote了不同的Value(可以是不同的Ballot)? 为什么？
 
+## 5.4 Instance是什么？
+
+- 假设某西方国家议会每天只形成一个决议（或者说通过一个提案），但是每个州都有自己的提案，都希望自己的提案早日被通过。那么，每一天形成的一个决议的过程，就是一个Instance。一年有365个Instance。Instance之间顺序是有意义的，1号决议不能在 2号决议后执行，2号决议可能还废除了1号决议。
+- Ballot Number跟Instance之间的关系：每个州都在做提案，到底通过谁呢，但是一天只能通过一个提案，到底通过哪一个？可以想象成各个州在竞标，把Ballot Number想象成不断增加的竞标出价。
+
+## 5.5 Multi Paxos的Multi是什么？
+
+### 要解决的问题
+
+- 如果每个Instance都完整地走两个Phase，即使完全没有并发proposal导致冲突，也需要两轮网络交互
+- 并发propose导致冲突多： 考虑多个 Proposer都不断增加自己的Ballot Number，让其他Proposer的phase2不能顺利完成。会导致单个Instance的决议形成比较慢。
+
+### 基本做法
+
+- Multi Paxos是用来提升效率的，无关正确性。
+- 简单来说，让一个Phase1 对应多个Phase 2。即：一个proposer用Ballot Number b1完成Phase1后，认为自己是leader，用b1去发送多个Instance的phase2。客户都会把提案交给 Leader去提议，除非认为Leader宕机了。
+- 对于每个Instance来说，那个Proposer先提proposal，用什么Ballot Number，都不影响正确性。所以，leader宕机或者别人认为它已经不是Leader，都不影响正确性。
+
+
+
 
 
 [1] Leslie Lamport的Paper: Paxos Made Simple
 
 [2] Leslie Lamport的讲座视频：The Paxos algorithm or how to win a Turing Award. 
+
+[3] Paxos的TLA+ Spec: https://github.com/tlaplus/Examples/tree/master/specifications/Paxos
 
 
 
