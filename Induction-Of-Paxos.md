@@ -222,17 +222,19 @@ $$
 
 # 3. 推导相关的式子
 
-下面这些定义不是Paxos两阶段的一部分，但是对于理解两阶段为什么是对的，却是很重要的。
+下面这些定义不是Paxos两阶段的一部分，主要来自Voting.tla，这个TLA+ Spec是对Voting过程的更高层次的抽象，聚焦于正确性和抽象过程。这些式子对于理解两阶段为什么是对的，却是很重要的。
 
 ## 3.2 基本函数定义
 
-- VotedFor(a, b, v):  Acceptor a曾经Vote了选票($b$, $v$)，即发送过对应的Phase2b消息。注意Voted/Accepted两个词会交换使用。
+- VotedFor(a, b, v):  Acceptor a曾经Vote了选票($b$, $v$)，即发送过对应的”2b“消息。注意Voted/Accepted两个词会交换使用。
 
 - ChosenAt(b, v): 存在一个Quorum Q，Q里面每个Acceptor都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是ChosenAt的含义；
 
+- 注意，在这个式子中，chosen是一个动态计算出来的值，不一定需要显示保存在一个变量中；
+
 - DidNotVoteAt(a, b):  Acceptor a从未给 $Bal = b$ 的选票投票；
 
-- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票而且以前也没有投过(过去、现在和未来都不会给$Bal=b$的选票投票 )。即$maxBal[a] >b$并且DidNotVoteAt(a, b)。 
+- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票而且以前也没有投过(过去、现在和未来都不会给$Bal=b$的选票投票 )。即$maxBal[a] >b$并且DidNotVoteAt(a, b)。
   $$
   \begin{split}
   VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
@@ -273,7 +275,6 @@ $$
 - 意义: 除了v以外，不可能用 Bal b选定其他Value。
 - **注意**：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true或者false。即它只是否定部分别人，并没有确定自己。
 - 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票给了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
-- 反证：假设存在某个Value $w$, $w\ne v$, 有$ChosenAt(b, w)$。则必须有某个 Quorum R，满足： $\forall a \in R, VotedFor(a, b, w)$，根据Quorum的含义，R必然与 Q有交集，假设这个交集包含 Acceptor $a_1$，那么有: $\exists a_1: a_1 \in Q \land VotedFor(a_1, b, w)$，这与前提矛盾。
 
 **FAQ**: 为什么$NoneOtherChoosableAt(b,v)$不是$NoneOtherChoosableAt(a, b, v)$?
 
@@ -281,9 +282,9 @@ $$
 
 ### 3.2.2 SafeAt(b, v)
 
-- 含义： 不可能用小于b的Ballot Number，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的Bal范围定义到到一个区间$[0, b-1]$.
+- 含义： 不可能用小于b的某个Bal，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的Bal范围定义到到一个区间$[0, b-1]$;
 
-- 注意：不能被选定，**不代表不能Accept/Vote**， 只要Vote不形成Quorum即可。
+- 注意：不能被选定，**不代表不能Accept/Vote**， 只要Vote不形成Quorum即可;
 
 - 公式：
 $$
@@ -295,10 +296,10 @@ $$
 
 ### 3.2.3 不变式
 
-所谓不变式，是推导的关键部分，即它们在状态机执行过程中的每一个状态都是成立的，并且下一个状态的Inv成立，依赖于之前每个状态都满足Inv。后面会进一步讨论。
+所谓不变式，即它们在状态机执行过程中的每一个状态都是成立的。下一个状态的Inv成立，往往也依赖于之前每个状态都满足Inv。后面会进一步讨论。
 
-- Inv包括 VotesSafe 和 OneValuePerBallot
-- VotesSafe: 投票就蕴含了投票本身是安全的（即大家都遵守规则去投票，不能随便投，或者说没有撒谎捣乱的)；
+- Voting过程的不变式定义：$Inv = VotesSafe \land OneValuePerBallot$
+- VotesSafe: 投票就蕴含了投票本身是安全的（即大家都遵守规则去发送、回复消息和投票，不能随便投，或者说没有撒谎捣乱的)；
 - OneValuePerBallot: 同一个Ballot的任意两个phase2b(不同的Acceptor)，对应的 Value必定相同
 
 $$
@@ -317,6 +318,10 @@ $$
 #### FAQ: OneValuePerBallot如何保证？
 
 它实际上是通过Phase2a来保证的，即不可能有两个2a消息，它们的Bal相同，但是Value不同。参见Phase2a部分的FAQ。
+
+
+
+那么$VotesSafe$是如何保证的？实际上proposer在发送"2a"消息前，会检查下面的$ShowsSafeAt(Q,b,v)$成立。Phase2b做的检查非常少，真正的安全是Phase2a来保证的。
 
 ### 3.2.4 ShowsSafeAt(Q, b, v)
 
@@ -340,7 +345,7 @@ $$
 
 - Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何Value(简单理解：一大半人都承诺不选了)。
 - Cond 2.1的定义，如果c不等于-1，则有VotedFor(a,c,v)，那么这个Vote发生时已经保证了SafeAt(c,v)；
-  而VotedFor(a,c,v)和OneValuePerBallot，保证了NoneOtherChoosableAt(c, v)；
+  而 $VotedFor(a,c,v)$ 和 $OneValuePerBallot$，保证了$NoneOtherChoosableAt(c, v)$；
 
 $$
 \begin{split}
@@ -352,17 +357,17 @@ $$
 
 #### FAQ 1：ShowSafeAt是做什么的？
 
-它是proposer判断是否可以发送”2a“消息以及该用Value的实际判断条件。
+它是Proposer判断是否可以发送”2a“消息以及该用Value的实际判断条件。
 
-#### FAQ 2:  ShowSaftty的含义？
+#### FAQ 2:  ShowSafety的含义？
 
-这个定理表明，如果之前每个状态都满足不变式Inv，那么只要有了ShowsSafeAt(Q, b, v)，就可以推导出SafeAt(b, v)。这实际上是一种归纳推导的过程。
+这个定理表明，如果之前每个状态都满足不变式Inv，Phase2a确认ShowsSafeAt(Q, b, v)，就可以推导出SafeAt(b, v)。这实际上是一种归纳推导的过程。我们在下一章会结合图来说明其推导过程。
 
 
 
 # 4. 消息的含义和一些推导
 
-## 4.1 各个消息的隐含的承诺(不变式)
+## 4.1 各个消息的隐含的承诺
 
 ### Phase1a消息 <"1a", b>:
 
@@ -382,7 +387,7 @@ $$
 
 ​                 $CannotVoteBetween(a, maxVBal[a], b) \land SafeAt(maxBal[a], maxVBal[a])$  
 
-其中前一部分是a的承诺，后面的SafeAt是转达。
+其中前一部分是a的承诺，后面的SafeAt是转达已有的Vote。
 
 
 
@@ -434,7 +439,7 @@ Phase1b和Phase2b都有自己的前提条件，比如a在Phase1b修改了$maxBal
 
 
 
-## 4.3 Proposer如何推导出正确的Value？
+## 4.3 Phase2a如何推导出正确的Value？
 
 前面的$ShowSasfAt(Q, b, v)$是如何得出来的？
 
@@ -448,7 +453,7 @@ Phase1b和Phase2b都有自己的前提条件，比如a在Phase1b修改了$maxBal
 
 $[0, b_1-1], [b_1, b_1], [b_1+1, b-1]$
 
-假设一个Acceptor收到了一个Phase2a，它如何确认自己可以安全地Vote呢？能否保证$SafeAt(b, v)$?  回顾下$SafeAt$的式子，它需要保证整个区间都满足 NoOtherChoosable。
+假设一个Acceptor收到了一个Phase2a，它如何确认自己可以安全地Vote呢？能否保证$SafeAt(b, v)$?  回顾下$SafeAt$的式子，它需要保证整个Bal区间都满足 NoOtherChoosableAt。
 $$
 \begin{split}
 SafeAt(b, v) &= \\ 
@@ -500,9 +505,9 @@ $VotesSafe \land OneValuePerBallot$ 成立
 
 - 假设在当前状态下满足Inv；
 - 可执行的操作包括Phase1a、Phase1b, Phase2a, Phase2b；
-- 由于Phase2a才产生可被Accept的Ballot 和 Value，所以关键在于证明这一步不违反Inv。
-- 我们在4.3节，已经证明了推导出的Value不违反SafeAt(b, v)。
-- TODO： OneValuePerBallot的梳理？
+- 由于Phase2a才产生可被Accept的Ballot 和 Value，所以关键在于证明这一步产生的Proposal，如果被Accept，不违反Inv；
+- 我们在4.3节，已经证明了Phase2a推导出的Value不违反SafeAt(b, v)。
+- TODO： OneValuePerBallot 的梳理？
 
 ## 4.5 反证法
 
@@ -525,6 +530,8 @@ $$
 由于$b_2 \in [0, b_1-1]$，所以有$NoneOtherChoosableAt(b_2, v_1)$成立，这与$ChosenAt(b_2,v_2)$矛盾。
 
 $b_1=b_2$是另外一个问题，前面描述的 OneValuePerBallot 已经保证了它不会出现。
+
+
 
 ## 4.5 一张图回顾下整体过程
 
