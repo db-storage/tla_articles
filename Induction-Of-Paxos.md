@@ -42,11 +42,187 @@ Paoxs已经这么难懂，为什么还要用偏形式化的方法去说起推理
 
 注意这里描述的是基本paxos，相当于multi paxos里面的单个Instance。多个Instance当然可以选定多个值。在本文最后会简单说下multi paxos，但不是本文重点。
 
-# 2. Paxos的两阶段回顾
+# 2. 推导相关的式子
+
+下面这些定义不是Paxos两阶段的一部分，主要来自Voting.tla，这个TLA+ Spec是对Voting过程的更高层次的抽象，聚焦于正确性和抽象过程。这些式子对于理解两阶段为什么是对的，却是很重要的。
+
+## 2.1 基本函数定义
+
+- VotedFor(a, b, v):  Acceptor a曾经Vote了选票($b$, $v$)，即发送过对应的”2b“消息。注意Voted/Accepted两个词会交换使用。
+
+- ChosenAt(b, v):  存在一个Quorum Q，Q里面每个Acceptor都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是ChosenAt的含义；
+
+- 注意，在这个式子中，chosen是一个动态计算出来的值，不一定需要显示保存在一个变量中；
+
+- DidNotVoteAt(a, b):  Acceptor a从未给 $Bal = b$ 的选票投票；
+
+- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票而且以前也没有投过(过去、现在和未来都不会给$Bal=b$的选票投票 )。即$maxBal[a] >b$并且DidNotVoteAt(a, b)。
+  $$
+  \begin{split}
+  VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
+  ChosenAt(b, v) = \space  &\exists Q \in Quorum :   \\
+                     &  \forall a \in Q : VotedFor(a, b, v) \\
+  chosen = &\{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\
+    
+  DidNotVoteAt(a, b) = &\forall v \in Value : \lnot VotedFor(a, b, v) \\
+  CannotVoteAt(a, b) = &\land maxBal[a] > b\\
+              &\land DidNotVoteAt(a, b)\\
+  \end{split}
+  $$
+
+
+
+#### FAQ: 为什么需要CannotVoteAt里面要包含 DidNotVoteAt?
+
+- 如果没有DidNotVoteAt，假设有个v和 Q1，满足： 
+  $$
+  \begin{split}
+  \exists  v \in Values, Q_1 \in &Quorum: \\ 
+  &\forall a \in Q_1: VotedFor(a, b, v) \land maxBal[a]>b
+  \end{split}
+  $$
+  即Q1里面的成员虽然现在和未来不能再VoteFor(b, v)，但是之前已经都Vote过了，那么可能$ChosenAt(b,v)$早已经为true。
+
+### NoneOtherChoosableAt(b, v)
+
+$$
+\begin{split}
+NoneOtherChoosableAt(b, v) = \\
+\exists Q \in Quorum : \\
+     & &\forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
+     \end{split}
+$$
+
+- 意义: 除了v以外，不可能用 Bal b选定其他Value。
+- **注意**：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true或者false。即它只是否定部分别人，并没有确定自己。
+- 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票给了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
+
+**FAQ**: 为什么$NoneOtherChoosableAt(b,v)$不是$NoneOtherChoosableAt(a, b, v)$?
+
+因为NoneOtherChoosableAt是个全局概念，不是某个Acceptor的承诺，而是纵观所有Acceptor，确定$(b, v)$之前一定没有被选定，将来也不会被选定 。
+
+### SafeAt(b, v)
+
+- 含义： 不可能用小于b的某个Bal，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt 的 Bal范围定义到到一个区间$[0, b-1]$;
+
+- 注意：不能被选定，**不代表不能被Accept/Vote**，只要Vote不形成Quorum即可;
+
+- 公式：
+
+$$
+\begin{split}
+  SafeAt(b, v) &= \\ 
+  &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)
+  \end{split}
+$$
+
+### 不变式Inv
+
+所谓不变式，即它们在状态机执行过程中的每一个状态都是成立的。下一个状态的Inv成立，往往也依赖于之前每个状态都满足Inv。后面会进一步讨论。
+
+- Voting过程的不变式定义：$Inv = VotesSafe \land OneValuePerBallot$
+
+- VotesSafe: 要求每个acceptor在确认投票安全的情况下才能投票（即大家都遵守安全规则去投票，不能随便投，或者说没有撒谎捣乱的)；
+  $$
+  \begin{split}VotesSafe = &\forall a \in Acceptor, b \in Ballot, v \in Value : \\              &VotedFor(a, b, v) => SafeAt(b, v)\end{split}
+  $$
+  
+
+- OneValuePerBallot: 同一个Ballot的任意两个phase2b(不同的Acceptor)，对应的 Value必定相同
+
+$$
+\begin{split} OneValuePerBallot =      &\forall a1, a2 \in Acceptor, b \in Ballot, v1, v2 \in Value : \\       & VotedFor(a1, b, v1) \land VotedFor(a2, b, v2) => (v1 = v2) \end{split}
+$$
+
+**注意，Inv是对历史上所有发生过的投票的都需要满足的限制条件，而不是某一次。另外，它没有告诉我们如何做到。**
+
+
+
+## 2.2 保证Consensus的充分条件
+
+1. VotesSafeImpliesConsistency:  只要保证$VotesSafe$ 和 $OneVote$，就能保证 Consensus。
+
+2. OneVote:  OneValuePerBallot 蕴含了 OneVote。
+
+    证明：从(b1, v), (b2, w)和 （b1, v), (b1, v)两种可能性去分析和反证。   
+
+## 2.2.1 反证法
+
+假设上述的$VotesSafe$ 和 $OneVote$不能保证 Consensus，会选定两个或者多个不同的Value，即：
+$$
+\exists b_1, v_1, b_2, v_2: ChosenAt(b_1, v_1) \land  ChosenAt(b_2, v_2)\land v_1 \neq v_2
+$$
+
+
+
+**Case 1:**
+
+假设$b_1\neq b_2$，不失一般性，假设$b_1>b_2$。那么必然有$SafeAt(b_1, v_1)$，根据定义：
+$$
+\begin{split}
+SafeAt(b_1, v_1) &= \\ 
+&\forall c \in [0,(b_1-1)] : NoneOtherChoosableAt(c, v_1)
+\end{split}
+$$
+由于$b_2 \in [0, b_1-1]$，所以有$NoneOtherChoosableAt(b_2, v_1)$成立，这与$ChosenAt(b_2,v_2)$矛盾。
+
+**Case 2:**
+
+ 假设$b_1=b_2$，这与 OneValuePerBallot矛盾，所以不会出现。
+
+
+
+## 2.3 从上帝视角，产生满足Inv的Value？
+
+$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是没有告诉我们怎么去产生有效的<b, v>。但是如果我们不知道可以产生什么样的<b, v>，那么，就没法有效运转。 
+
+先不考虑实现和协议。假设我们有个上帝视角，我们可以看到所有acceptor的状态，怎么产生一个满足Inv 的<b, v> ? 可以用下面的式子来表示：
+
+### ShowsSafeAt(Q, b, v)
+
+$$
+\begin{split}ShowsSafeAt(Q, b, v) = \\  &\land \forall a \in Q : maxBal[a] \geq b \\  &\land \exists c \in -1..(b-1) : \\  &\land (c \neq -1) => \exists a \in Q : VotedFor(a, c, v) \\  &\land \forall d \in (c+1)..(b-1), a \in Q : DidNotVoteAt(a, d)\end{split}
+$$
+
+- 含义：存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
+- **Cond 1:** Q内任意一个Acceptor a，满足$maxBal[a] >= b$
+- **Cond2:** 存在一个小于b的Ballot c，同时满足下面两个条件：
+  - **Cond 2.1:** 如果 $c \ne -1$，则满足：Q中至少有一个Acceptor a, a给(b, v)投过票。注意，如果 $c = -1$，则没有限制，这是一个特殊场景，即所有Acceptor都没有投过票。
+  - **Cond 2.2:** Q中没有任何Acceptor a，给[c+1, b-1]之间的任何Bal投过票。即Q里面的所有 Acceptor在[c+1, b-1]这个区间，都完全没有投票。
+
+其中：
+
+- Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何Value(简单理解：一大半人都承诺不选了)。
+- Cond 2.1的定义，如果c不等于-1，则有VotedFor(a,c,v)，那么这个Vote发生时已经保证了SafeAt(c,v)；
+  而 $VotedFor(a,c,v)$ 和 $OneValuePerBallot$，保证了$NoneOtherChoosableAt(c, v)$；
+
+
+
+#### FAQ：ShowsSafeAt是做什么的？
+
+如果对应到后面的paxos，它就是Proposer判断是否可以发送”2a“消息以及该用Value的实际判断条件。
+
+### ShowsSafety定理
+
+$$
+\begin{split}定理 \space ShowsSafety & = VotesSafe \land OneValuePerBallot => \\       & \qquad \qquad \forall Q \in Quorum, b \in Ballot, v \in Value :\\       & \qquad \qquad \qquad    ShowsSafeAt(Q, b, v) => SafeAt(b, v)            \end{split}
+$$
+
+
+
+#### FAQ:  ShowsSafety的含义？
+
+这个定理表明，如果之前所有操作都满足了Inv，只要某个Acceptor a判断ShowsSafeAt(Q, b, v)成立，就可以推导出SafeAt(b, v)，从而可以投票 。这实际上是一种归纳推导的过程。我们在后面结合图来说明Paxos具体如何对应。
+
+这里其实用到的是强归纳法，即我么在推导$n=m+1$时成立，不止要求$n=m$时成立，而是要求所有$n \le m$时都成立。这也是不变式的含义，即任何时候都要满足。
+
+
+
+# 3. Paxos的两阶段回顾
 
 这一部分回顾下"Paxos Made Simple"一文的描述的Paxos的两个阶段。但是从具体形式上，使用了公式化描述。这些公式来自[3]。
 
-## 2.1 常量和变量定义部分
+## 3.1 常量和变量定义部分
 
 我们先抽取一些必要的变量和常量定义 ，Set和Map跟编程语言中场景概念相同。这些对于有计算机或者数学基础的读者应该不难 。其中常量是需要预先给定值的。
 
@@ -93,7 +269,7 @@ $$
 
 约定：在后面的很多式子中，我们经常用到逻辑与($\land$)和逻辑或($\lor$)，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$，这一点对于状态变更很重要，因为只有条件成立才执行某个动作，而整体用一个逻辑表达式来表示。
 
-## 2.2 Phase1a
+## 3.2 Phase1a
 
 Phase1a即Proposer给各个Acceptor发送phase1a消息，参数b为Ballot Number。
 
@@ -117,7 +293,7 @@ $$
 
 $msgs'$的含义：在状态机中，变量$msg$的下一个状态的值。其他变量也类似。
 
-## 2.3 Phase1b
+## 3.3 Phase1b
 
 Phase1b过程，是Acceptor a根据自己的变量去判断，能否响应一个 Phase1a消息，如果符合条件，则发送一个"1b"消息。参数 a是Acceptor自己的标识。
 $$
@@ -145,7 +321,7 @@ StateChange = &\land 前提条件 \\
 $$
 
 
-## 2.4 Phase2a
+## 3.4 Phase2a
 
 **前提条件：**
 
@@ -185,7 +361,7 @@ $$
 
 如果仅仅考虑上面的式子，并没有考虑多个Proposer，仿佛有个上帝视角 。在实际的paxos实现中，不同的Proposer，不允许用相同的Bal；如果同一个Proposer用相同的Bal执行两次phase1，不会两次都能收到Quorum的响应(因为执行Phase1b(a)后，maxBal[a]被增加了，这是承诺)。
 
-## 2.5 Phase2b
+## 3.5 Phase2b
 
 ​     一个Acceptor执行Phase2b的过程，分为以下几个部分。
 
@@ -220,148 +396,7 @@ $$
 
 - 因为执行Phase2b的Acceptor，不一定执行了Phase1b 。
 
-# 3. 推导相关的式子
 
-下面这些定义不是Paxos两阶段的一部分，主要来自Voting.tla，这个TLA+ Spec是对Voting过程的更高层次的抽象，聚焦于正确性和抽象过程。这些式子对于理解两阶段为什么是对的，却是很重要的。
-
-## 3.2 基本函数定义
-
-- VotedFor(a, b, v):  Acceptor a曾经Vote了选票($b$, $v$)，即发送过对应的”2b“消息。注意Voted/Accepted两个词会交换使用。
-
-- ChosenAt(b, v): 存在一个Quorum Q，Q里面每个Acceptor都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是ChosenAt的含义；
-
-- 注意，在这个式子中，chosen是一个动态计算出来的值，不一定需要显示保存在一个变量中；
-
-- DidNotVoteAt(a, b):  Acceptor a从未给 $Bal = b$ 的选票投票；
-
-- CannotVoteAt(a, b)： Acceptor a不能给任何 $Bal = b$的选票投票而且以前也没有投过(过去、现在和未来都不会给$Bal=b$的选票投票 )。即$maxBal[a] >b$并且DidNotVoteAt(a, b)。
-  $$
-  \begin{split}
-  VotedFor(a, b, v) =\space &<<b, v>> \in votes[a]\\
-  ChosenAt(b, v) = \space  &\exists Q \in Quorum :   \\
-                     &  \forall a \in Q : VotedFor(a, b, v) \\
-  chosen = &\{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\
-    
-  DidNotVoteAt(a, b) = &\forall v \in Value : \lnot VotedFor(a, b, v) \\
-  CannotVoteAt(a, b) = &\land maxBal[a] > b\\
-              &\land DidNotVoteAt(a, b)\\
-  \end{split}
-  $$
-  
-
-
-
-#### FAQ: 为什么需要CannotVoteAt里面要包含 DidNotVoteAt?
-
-- 如果没有DidNotVoteAt，假设有个v和 Q1，满足： 
-  $$
-  \begin{split}
-  \exists  v \in Values, Q_1 \in &Quorum: \\ 
-  &\forall a \in Q_1: VotedFor(a, b, v) \land maxBal[a]>b
-  \end{split}
-  $$
-  即Q1里面的成员虽然现在和未来不能再VoteFor(b, v)，但是之前已经都Vote过了，那么可能$ChosenAt(b,v)$早已经为true。
-
-### 3.2.1  NoneOtherChoosableAt(b, v)
-
-$$
-\begin{split}
-NoneOtherChoosableAt(b, v) = \\
-\exists Q \in Quorum : \\
-     & &\forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
-     \end{split}
-$$
-
-- 意义: 除了v以外，不可能用 Bal b选定其他Value。
-- **注意**：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true或者false。即它只是否定部分别人，并没有确定自己。
-- 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票给了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
-
-**FAQ**: 为什么$NoneOtherChoosableAt(b,v)$不是$NoneOtherChoosableAt(a, b, v)$?
-
-因为NoneOtherChoosableAt是个全局概念，不是某个Acceptor的承诺，而是纵观所有Acceptor，确定$(b, v)$之前一定没有被选定，将来也不会被选定 。
-
-### 3.2.2 SafeAt(b, v)
-
-- 含义： 不可能用小于b的某个Bal，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt的Bal范围定义到到一个区间$[0, b-1]$;
-
-- 注意：不能被选定，**不代表不能Accept/Vote**， 只要Vote不形成Quorum即可;
-
-- 公式：
-$$
-\begin{split}
-  SafeAt(b, v) &= \\ 
-  &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)
-  \end{split}
-$$
-
-### 3.2.3 不变式
-
-所谓不变式，即它们在状态机执行过程中的每一个状态都是成立的。下一个状态的Inv成立，往往也依赖于之前每个状态都满足Inv。后面会进一步讨论。
-
-- Voting过程的不变式定义：$Inv = VotesSafe \land OneValuePerBallot$
-- VotesSafe: 投票就蕴含了投票本身是安全的（即大家都遵守规则去发送、回复消息和投票，不能随便投，或者说没有撒谎捣乱的)；
-- OneValuePerBallot: 同一个Ballot的任意两个phase2b(不同的Acceptor)，对应的 Value必定相同
-
-$$
-\begin{split}
-VotesSafe = &\forall a \in Acceptor, b \in Ballot, v \in Value : \\
-              &VotedFor(a, b, v) => SafeAt(b, v)\\
-OneValuePerBallot =  
-    &\forall a1, a2 \in Acceptor, b \in Ballot, v1, v2 \in Value : \\
-       & VotedFor(a1, b, v1) \land VotedFor(a2, b, v2) => (v1 = v2) \\
-Inv = &VotesSafe \land OneValuePerBallot
-\end{split}
-$$
-
-
-
-#### FAQ: OneValuePerBallot如何保证？
-
-它实际上是通过Phase2a来保证的，即不可能有两个2a消息，它们的Bal相同，但是Value不同。参见Phase2a部分的FAQ。
-
-
-
-那么$VotesSafe$是如何保证的？实际上proposer在发送"2a"消息前，会检查下面的$ShowsSafeAt(Q,b,v)$成立。Phase2b做的检查非常少，真正的安全是Phase2a来保证的。
-
-### 3.2.4 ShowsSafeAt(Q, b, v)
-
-$$
-\begin{split}
-ShowsSafeAt(Q, b, v) = \\
-  &\land \forall a \in Q : maxBal[a] \geq b \\
-  &\land \exists c \in -1..(b-1) : \\
-  &\land (c \neq -1) => \exists a \in Q : VotedFor(a, c, v) \\
-  &\land \forall d \in (c+1)..(b-1), a \in Q : DidNotVoteAt(a, d)
-\end{split}
-$$
-
-- 含义：存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
-- **Cond 1:** Q内任意一个Acceptor a，满足$maxBal[a] >= b$
-- **Cond2:** 存在一个小于b的Ballot c，同时满足下面两个条件：
-  - **Cond 2.1:** 如果 $c \ne -1$，则满足：Q中至少有一个Acceptor a, a给(b, v)投过票。注意，如果 $c = -1$，则没有限制，这是一个特殊场景，即所有Acceptor都没有投过票。
-  - **Cond 2.2:** Q中没有任何Acceptor a，给[c+1, b-1]之间的任何Bal投过票。即Q里面的所有 Acceptor在[c+1, b-1]这个区间，都完全没有投票。
-
-其中：
-
-- Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何Value(简单理解：一大半人都承诺不选了)。
-- Cond 2.1的定义，如果c不等于-1，则有VotedFor(a,c,v)，那么这个Vote发生时已经保证了SafeAt(c,v)；
-  而 $VotedFor(a,c,v)$ 和 $OneValuePerBallot$，保证了$NoneOtherChoosableAt(c, v)$；
-
-$$
-\begin{split}
-定理 \space ShowsSafety & = VotesSafe \land OneValuePerBallot => \\
-       & \qquad \qquad \forall Q \in Quorum, b \in Ballot, v \in Value :\\
-       & \qquad \qquad \qquad    ShowsSafeAt(Q, b, v) => SafeAt(b, v)
-            \end{split}
-$$
-
-#### FAQ 1：ShowSafeAt是做什么的？
-
-它是Proposer判断是否可以发送”2a“消息以及该用Value的实际判断条件。
-
-#### FAQ 2:  ShowSafety的含义？
-
-这个定理表明，如果之前每个状态都满足不变式Inv，Phase2a确认ShowsSafeAt(Q, b, v)，就可以推导出SafeAt(b, v)。这实际上是一种归纳推导的过程。我们在下一章会结合图来说明其推导过程。
 
 
 
@@ -491,7 +526,7 @@ $$
 
 
 
-## 4.5 归纳法看正确性
+## 4.5 归纳法看正确性（Paxos如何保证Inv?）
 
 #### 4.5.1 在初始(Init)状态
 
@@ -509,27 +544,7 @@ $VotesSafe \land OneValuePerBallot$ 成立
 - 我们在4.3节，已经证明了Phase2a推导出的Value不违反SafeAt(b, v)。
 - TODO： OneValuePerBallot 的梳理？
 
-## 4.5 反证法
 
-假设上述的 Paxos算法不正确，会选定两个或者多个不同的Value，即：
-$$
-ChosenAt(b_1, v_1) \land  ChosenAt(b_2, v_2)\land v_1 \neq v_2
-$$
-
-根据前面描述的过程，这两个选定的 Value必然有自己的Phase2a过程，即执行过
-
-$Phase2a(b_1, v_1)$和$Phase2a(b_2, v_2)$。
-
-我们假设$b_1>b_2$。那么$Phase2a(b_1, v_1) =>SafeAt(b_1, v_1)$，根据定义：
-$$
-\begin{split}
-SafeAt(b_1, v_1) &= \\ 
-&\forall c \in [0,(b_1-1)] : NoneOtherChoosableAt(c, v_1)
-\end{split}
-$$
-由于$b_2 \in [0, b_1-1]$，所以有$NoneOtherChoosableAt(b_2, v_1)$成立，这与$ChosenAt(b_2,v_2)$矛盾。
-
-$b_1=b_2$是另外一个问题，前面描述的 OneValuePerBallot 已经保证了它不会出现。
 
 
 
