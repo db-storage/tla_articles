@@ -516,25 +516,50 @@ Phase1b和Phase2b都有自己的前提条件，比如a在Phase1b修改了$maxBal
 
 ## 4.4 Paxos如何保证Inv?
 
-Inv 包括OneValuePerBallot 和VotesSafe
+Inv 包括OneValuePerBallot 和VotesSafe。事实上Paxos在执行过程中，保证不变式Inv在每一步都成立。而下一步执行后释放成立，依赖于其执行前是否满足Inv。
+
+由于$VotesSafe$和$OneValuePerBallot$都是对已发送所有投票的限定条件，而新的状态如果会导致新的投票，也会成为被约束的对象。因此，Inv约束的对象是不断变化的，本身是个滚动过程。
 
 #### 4.4.1 如何保证OneValuePerBallot？
 
-反证法：$<b, v>$是Phase2a产生的，假设不成立，即有一个Bal $b_x$，有两个proposer $P_1$和$P_2$分别提议了对应$<b_x, v_1>$和$<b_x, v_2>$两个”2a“。那么$P_1$必然收到了某个Quorum $Q_1$里面所有成员的"1b"消息；而$P_2$收到了某个Quorum Q2里面所有成员的"1b"消息。但是这是不可能的，因为每个Acceptor a在发送"1b"时，已经保证$maxBal[a] > b_x$，所以不可能在响应下一个Bal为$b_x$的"1a"。而根据Quorum的定义，$Q1$和$Q2$必然有交集，矛盾。
+$$
+\begin{split} OneValuePerBallot =      &\forall a1, a2 \in Acceptor, b \in Ballot, v1, v2 \in Value : \\       & VotedFor(a1, b, v1) \land VotedFor(a2, b, v2) => (v1 = v2) \end{split}
+$$
+
+OneValuePerBallot由于只涉及一个Bal的比较，相对独立，我们先用反证法证明它成立。
+
+反证法：$<b, v>$是Phase2a产生的，假设不成立，即有一个Bal $b_x$，有两个proposer $P_1$和$P_2$分别提议了对应$<b_x, v_1>$和$<b_x, v_2>$两个”2a“。那么$P_1$必然收到了某个Quorum $Q_1$里面所有成员的"1b"消息；而$P_2$收到了某个Quorum Q2里面所有成员的"1b"消息。但是这是不可能的，因为每个Acceptor a在发送"1b"时，已经保证$maxBal[a] > b_x$，所以不可能在响应下一个Bal为$b_x$的"1a"。而根据Quorum的定义，$Q1$和$Q2$必然有交集，与前提矛盾。
 
 所以，OneValuePerBallot 恒成立。
 
 
 
-### 4.4.2 如何保证 VotesSafe?
+### 4.4.2 如何保证 Inv?
 
-- 初始状态：$AllSafeAtZero = \forall v \in Value : SafeAt(0, v)$;
 - 根据上一段证明，OneValuePerBallot 恒成立。而$Inv = OneValuePerBallot \land VotesSafe$， 后续我们只要讨论VotesSafe是否能保证即可。
-- 假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，没有任何一个投票发生过，因此必然满足$VotesSafe$，因此，$Phase2a(b, v)$在执行时，$ShowsSafeAt(Q, b_1, v_1)$已经蕴含了$SafeAt(b_1, v_1)$。
-- 假设第2个执行Phase2a的选票是选票是$<b_2, v_2>$，也就是说之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Vote过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，而$SafeAt(b_1, v_1)$已经成立，因此$VotesSafe$必然成立。
-- 假设第n个执行Phase2a的选票是选票是$<b_n, v_n>$，那么在它之前，值有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ 可能被Vote过，由于这些选票的Phase2a已经保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，因此VotesSafe仍然成立。所以，$Phase2a(b_n, v_n)$根据$ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$必然能保证$SafeAt(b_n, v_n)$。
+
+- 回顾下VotesSafe的定义，它要求所有已经发生的投票都是安全的。
+  $$
+  \begin{split}VotesSafe = &\forall a \in Acceptor, b \in Ballot, v \in Value : \\              &VotedFor(a, b, v) => SafeAt(b, v)\end{split}
+  $$
+
+- 这里的推导思路是：在Phase2a产生选票时，就要保证安全性，后续该选票无论是否被Accept都不影响安全性。每一个Phase2a执行时，根据当前Inv成立，来推导出自身的安全性。
+
+- 假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，没有产生过任何一个选票，因此没有任何一个投票(Phase2b)被Accept过，因此必然满足Inv。因此，$Phase2a(b_1, v_1)$在执行时，$ShowsSafeAt(Q, b_1, v_1)$已经蕴含了$SafeAt(b_1, v_1)$。
+
+- 假设第2个执行Phase2a的选票是$<b_2, v_2>$，也就是说它之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Vote过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，而$SafeAt(b_1, v_1)$已经成立，因此$Phase2a(b_2, v_2)$被执行后，Inv依然成立。
+
+- 强归纳法：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论它们分别被Vote了多少次，所以本步骤执行前Inv成立。所以，$Phase2a(b_n, v_n)$根据$ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$必然能保证$SafeAt(b_n, v_n)$，因此本步骤执行后Inv依然成立。
 
 
+
+#### FAQ: 讨论Paxos如何满足Inv时，为什么不提Phase1a, Phase1b, Phase2b?
+
+- Phase1a和Phase1b本身不产生选票，不影响VotesSafe和OneValuePerBallot是否成立。
+
+- Phase2a在产生选票$<b, v>$时，已经保证了选票的安全性$SafeAt(b,v)$，这个式子的成立不依赖于这个选票是否被Accept，以及被Accept了几次。
+
+  
 
 ## 4.5 一张图回顾下整体过程
 
