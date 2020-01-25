@@ -195,7 +195,7 @@ $$
 其中：
 
 - Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何Value(简单理解：一大半人都承诺不选了)；
-- Cond 2.1的定义，如果c不等于-1，则有VotedFor(a,c,v)，那么这个Vote发生时已经保证了SafeAt(c,v)；
+- Cond 2.1的定义，如果c不等于-1，则有$VotedFor(a,c,v)$，那么投票时已经保证了$SafeAt(c,v)$；
   而 $VotedFor(a,c,v)$ 和 $OneValuePerBallot$，保证了$NoneOtherChoosableAt(c, v)$；
 
 
@@ -279,8 +279,6 @@ $$
 $$
 \begin{split}定理 \space ShowsSafety & = VotesSafe \land OneValuePerBallot => \\       & \qquad \qquad \forall Q \in Quorum, b \in Ballot, v \in Value :\\       & \qquad \qquad \qquad    ShowsSafeAt(Q, b, v) => SafeAt(b, v)            \end{split}
 $$
-
-
 
 #### FAQ:  ShowsSafety的含义？
 
@@ -431,7 +429,7 @@ Ph&ase2a(b, v) =\\
   \end{split}
 $$
 
-这个式子实际上就是$ShowsSafeAt(Q, b, v)$ 的msg版，即根据收集到的msg来判断，而不是直接看到每个acceptor的所有变量。因为在实际系统中，没有上帝视角。
+发送消息$<"2a", b, v>$前确认 $<b, v>$是安全的过程，实际上跟$ShowsSafeAt(Q, b, v)$是等价的，只是判断时根据回复的'1b'消息来判断。这是因为Proposer没有上帝视角，无法看到每个acceptor的所有变量，只能根据收集到的msg来判断。
 
 ## 3.5 Phase2b
 
@@ -526,9 +524,9 @@ $$
 \begin{split} OneValuePerBallot =      &\forall a1, a2 \in Acceptor, b \in Ballot, v1, v2 \in Value : \\       & VotedFor(a1, b, v1) \land VotedFor(a2, b, v2) => (v1 = v2) \end{split}
 $$
 
-OneValuePerBallot由于只涉及一个Bal的比较，相对独立，我们先用反证法证明它成立。
+OneValuePerBallot由于只涉及同一个Bal的比较，相对独立，先用反证法证明它成立。
 
-反证法：$<b, v>$是Phase2a产生的，假设不成立，即有一个Bal $b_x$，有两个proposer $P_1$和$P_2$分别提议了对应$<b_x, v_1>$和$<b_x, v_2>$两个”2a“。那么$P_1$必然收到了某个Quorum $Q_1$里面所有成员的"1b"消息；而$P_2$收到了某个Quorum Q2里面所有成员的"1b"消息。但是这是不可能的，因为每个Acceptor a在发送"1b"时，已经保证$maxBal[a] > b_x$，所以不可能在响应下一个Bal为$b_x$的"1a"。而根据Quorum的定义，$Q1$和$Q2$必然有交集，与前提矛盾。
+**反证法**：$<b, v>$是Phase2a产生的，假设OneValuePerBallot不成立，即有一个Bal $b_x$，有两个proposer $P_1$和$P_2$分别提议了对应$<b_x, v_1>$和$<b_x, v_2>$两个”2a“。那么$P_1$必然收到了某个Quorum $Q_1$里面所有成员的"1b"消息；而$P_2$收到了某个Quorum Q2里面所有成员的"1b"消息。但是这是不可能的，因为每个Acceptor a在发送"1b"时，已经保证$maxBal[a] > b_x$，所以不可能再次响应Bal同为$b_x$的"1a"。而根据Quorum的定义，$Q1$和$Q2$必然有交集，与前提矛盾。
 
 所以，OneValuePerBallot 恒成立。
 
@@ -536,34 +534,37 @@ OneValuePerBallot由于只涉及一个Bal的比较，相对独立，我们先用
 
 ### 4.4.2 如何保证 Inv?
 
-- 根据上一段证明，OneValuePerBallot 恒成立。而$Inv = OneValuePerBallot \land VotesSafe$， 后续我们只要讨论VotesSafe是否能保证即可。
+根据上一段证明，OneValuePerBallot 恒成立。而$Inv = OneValuePerBallot \land VotesSafe$， 后续我们只要讨论 VotesSafe 是否始终成立即可。
 
-- 回顾下VotesSafe的定义，它要求所有已经发生的投票都是安全的。
-  $$
-  \begin{split}VotesSafe = &\forall a \in Acceptor, b \in Ballot, v \in Value : \\              &VotedFor(a, b, v) => SafeAt(b, v)\end{split}
-  $$
+回顾下 VotesSafe 的定义，它要求所有已经发生的投票都是安全的。
+$$
+\begin{split}VotesSafe = &\forall a \in Acceptor, b \in Ballot, v \in Value : \\              &VotedFor(a, b, v) => SafeAt(b, v)\end{split}
+$$
+**推导思路是**：在 Phase2a 产生选票(”2a")时，就要保证安全性，后续该选票无论是否被Accept都不影响安全性。每一次 Phase2a 执行时，如果在执行前 Inv 成立，推导出在执行后  Inv 也成立。
 
-- 这里的推导思路是：在Phase2a产生选票时，就要保证安全性，后续该选票无论是否被Accept都不影响安全性。每一个Phase2a执行时，根据当前Inv成立，来推导出自身的安全性。
-
-- 假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，没有产生过任何一个选票，因此没有任何一个投票(Phase2b)被Accept过，因此必然满足Inv。因此，$Phase2a(b_1, v_1)$在执行时，$ShowsSafeAt(Q, b_1, v_1)$已经蕴含了$SafeAt(b_1, v_1)$。
-
-- 假设第2个执行Phase2a的选票是$<b_2, v_2>$，也就是说它之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Vote过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，而$SafeAt(b_1, v_1)$已经成立，因此$Phase2a(b_2, v_2)$被执行后，Inv依然成立。
-
-- 强归纳法：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论它们分别被Vote了多少次，所以本步骤执行前Inv成立。所以，$Phase2a(b_n, v_n)$根据$ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$必然能保证$SafeAt(b_n, v_n)$，因此本步骤执行后Inv依然成立。
+- 由于执行过程中总有一个选票是第一个被产生的。不妨假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，不可能有任何一个投票(Phase2b)被Accept过，因此必然满足 VotesSafe。根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_1, v_1)$已经蕴含了$SafeAt(b_1, v_1)$。因此本步骤执行后 Inv 依然成立。
+- 假设第2个执行Phase2a的选票是$<b_2, v_2>$，也就是说它之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Vote过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，而$SafeAt(b_1, v_1)$已经成立，$Phase2a(b_2, v_2)$被执行时，根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_2, v_2)$蕴含了$SafeAt(b_2, v_2)$ 。因此本步骤执行后 Inv 依然成立。
+- 强归纳法：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论这些选票分别被Vote了多少次。所以本步骤执行前Inv成立。根据$ShowsSafety$定理, $ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$蕴含了$SafeAt(b_n, v_n)$，因此本步骤执行后Inv依然成立。
 
 
 
-#### FAQ: 讨论Paxos如何满足Inv时，为什么不提Phase1a, Phase1b, Phase2b?
+#### FAQ: 讨论Paxos如何满足Inv时，为什么不讨论Phase1a, Phase1b, Phase2b?
 
-- Phase1a和Phase1b本身不产生选票，不影响VotesSafe和OneValuePerBallot是否成立。
+- Phase1a：不涉及任何影响 VotesSafe 和 OneValuePerBallot 的因子变化，因此不会影响Inv。
+- Phase1b:  某个Acceptor执行Phase1b本身不产生选票也不涉及投票。其唯一可能的修改是增大$maxBal[a]$，而增大$maxBal[a]$不会使得Inv从true变为false。
+- Phase2b： Phase2a在产生选票$<b, v>$时，已经保证了选票的安全性$SafeAt(b,v)$，这个式子的成立不依赖于这个选票是否被Accept，以及被Accept了几次，所以$VoteFor(a, b, v)$​不会使得Inv从true变为false，而增大$maxBal[a]$也不影响Inv。
 
-- Phase2a在产生选票$<b, v>$时，已经保证了选票的安全性$SafeAt(b,v)$，这个式子的成立不依赖于这个选票是否被Accept，以及被Accept了几次。
+#### FAQ：为什么增大$maxBal[a]$不影响Inv?
 
-  
+- **简单来说**，**增加maxBal[a]在任何时候都不违背承诺**，所以不会产生任何违背Safety影响。
+- 因为增加$maxBal[a]$只可能增加图中的灰色区域，即增大了不投票范围，不违背承诺。不会使得已经成立的SafeAa(b, v)变为false。
+- OneValuePerBallot也不会受到影响，对于某个Acceptor a来说，如果它已经发送过某个"1b"消息，即maxBal[a]=b，那么增加$maxBal[a]$显然不会让它再响应同一个Bal b的"1a"，不违背承诺。
+
+
 
 ## 4.5 一张图回顾下整体过程
 
-下面一张图较完整低说明了两阶段的过程，主要强调各个消息的含义。为了方便，只画出了两个acceptor $a_1, a_2$。注意橙色底色的是消息隐含的承诺/转达。为了简化，图中没有体现一些变量的变化(例如$maxBal$。这里假设 $\{a1, a2\}$是一个Quorum，且$b1>b2$，P0在收到两个 phase1b后，就可以推导出$SafeAt(b, v_1)$。
+下面一张图较完整地说明了两阶段的过程，主要强调各个消息的含义。为了方便，只画出了两个acceptor $a_1, a_2$。注意橙色底色的是消息隐含的承诺/转达。为了简化，图中没有体现一些变量的变化(例如$maxBal$。这里假设 $\{a1, a2\}$是一个Quorum，且$b1>b2$，P0在收到两个 phase1b后，就可以推导出$SafeAt(b, v_1)$。
 
   ![allinone](Figures/AllInOne.png)
 
@@ -593,6 +594,8 @@ OneValuePerBallot由于只涉及一个Bal的比较，相对独立，我们先用
 ## 5.2 有一个未形成共识的$Phase2a(b_1, v_1)$，如果将来形成共识，value会是$v_1$么？
 
 不一定，假设只有$a_1$ vote了这个phase2a，然后$a_1$ 宕机了，其他节点形成了共识，就仿佛这个phase2a没发生过。
+
+$NoneOtherChoosableAt(b, v)$只阻止了它人，没有肯定自己。
 
 
 
