@@ -648,26 +648,7 @@ $$
 
 # 5 一些FAQ
 
-## 5.1 分析下典型的并发场景？
-
-简单来说，如果一个 Proposal 未能进入Phase2(比如Phase1b未构成Quorum)，不够成任何value的选定，不可能影响chosen的值。所以我们跳过这种问题。只有进入Phase2a的过程，才有可能导致value被选定。
-
-假设Proposer P1顺利完成了Phase1，收到了某个 Quorum Q1内所有成员的“1b”消息，然后发送$phase2a(b_1,v_1)$。但是在P1收齐某个Quorum Q2的"2b"消息之前，另外一个Proposer P2开始了Phase1(Q1和Q2 不一定是相同的)。我们假设P2使用的Bal为 $b_2$。分两种情况：
-
-### 假设:  $b_2<b_1$
-
-这个场景下，P2的"1a"消息，都会被Q1内所有acceptor拒绝(履行承诺)，所以P2不可能进入Phase2a阶段。由于$b_2 < b_1$，对 P1的phase2执行也没有任何影响。
-
-### 假设:  $b_2>b_1$
-
-- 场景一: 假设存在一个Quorum Q2，Q2里面所有的Acceptor在给P1发送了"2b"后，才处理P2的"1a"消息。这就表示$ChosenAt(b_1, v_1)$ 成立。剩下的问题是：P2如何保证不会选定$v_1$以外的Value。由于 Q2是多数派，P2收到的"1b"消息中，至少有一个蕴含了$VotedFor(b_1, v_1)$，也就是保证了$SafeAt(b_1, v_1)$。
-- **场景二: 场景一以外的其他情况，即：对于任何一个Quorum Q, Q里至少有一个acceptor，先处理了P2的"1a"，然后才处理P1的"2a"。先处理P2的"1a"消息的Acceptor a, $maxBal[a]$ 变成了 $b_2$，所以不会Accept $phase2a(b_1, v_1)$，导致$<b_1, v_1>$无法被选定，因为根本不够成Quorum。既然$<b_1,v_1>$不可能被选定，不影响chosen的值。 P2的执行过程，跟P1是一样的。**  TODO
-
- 把上面例子中的P2换成P2, P3等多个，且对应的Bal都大于$b_1$，那么分析过程也是结论是类似的。
-
-
-
-## 5.2 有一个未形成共识的"2a"消息$<b_1, v_1>$，如果将来形成共识，value会是$v_1$么？
+## 5.1 有一个未形成共识的"2a"消息$<b_1, v_1>$，如果将来形成共识，value会是$v_1$么？
 
 不一定，假设只有$a_1$ Accept了这个"2a"，然后$a_1$ 宕机了，其他节点形成了共识，就仿佛这个"2a"没发生过。
 
@@ -675,39 +656,23 @@ $NoneOtherChoosableAt(b, v)$只阻止了它人，没有肯定自己。
 
 
 
-## 5.3 如果有多个未形成共识的"2b"?
+## 5.2 如果有多个未形成共识的"2b"?
 
 假设一共有5个Acceptor $\{a1, a2, a3, a4, a5\}$，$VotedFor(a_1,b_1,v_1)$, $ VotedFor(a_2,b_2, v_2)$ 和 $VotedFor(a_3,b_3, v_3)$都成立，且$b_1 \neq b_2 \neq b_3$,  $v_1\neq v_2  \neq v_3$，而$a_4, a_5$都没有Vote过，如果将来形成共识，value会是哪个？
 
 1）假设有个比$\{b_1,b_2,b_3\}$中任何一个都大的Bal $b_x$, 它的Phase1只有$a_1, a_4, a_5$参加了，并形成共识，那么选定的就是$v_1$。
 
-2）如果$a_1, a_2，a_3$都参加了$b_x$的Phase1，那么就根据$b_1, b_2, b_3$的最大值来决定，选取相应的Value。参见前面的推导过程。
+2）如果$a_1, a_2，a_3$都参加了$b_x$的Phase1，那么就根据$b_1, b_2, b_3$的最大值来决定，选取相应的Value。参见$ShowsSafeAt(Q, b, v)$。
 
-**思考**：会不会出现4个Acceptor，分别Vote了不同的Value(可以是不同的Ballot)? 为什么？
+**思考**：会不会出现4个Acceptor，分别Vote了**不同**的Value(可以是不同的Ballot)? 为什么？
 
 
 
-## 5.4 Instance是什么？
+## 5.3 Instance是什么？
 
 - 假设某西方国家议会每天只形成一个决议（或者说通过一个提案），但是每个州代表都有自己的提案，大家都抢着提，希望本州的提案早日被通过。那么，每一天形成一个决议的过程，就是一个Instance的执行过程，一年有365个Instance。Instance之间的相对顺序是有意义的，1号决议不能在 2号决议后执行，甚至2号决议可能还声称从某天开始废除1号决议。
 
 - Ballot Number跟Instance之间的关系：每个州代表都在做提案，但是一天只能通过一个提案，今天到底通过哪一个？可以想象成各个州在竞标，把Ballot Number想象成不断增加的竞标出价，只要没形成决议，可以不断提高竞价来抢。
-
-  
-
-## 5.5 Multi Paxos的Multi是什么？
-
-### 基本Paxos的效率问题
-
-- 如果每个Instance都完整地走两个Phase，即使完全没有并发proposal导致冲突，也需要两轮网络交互；
-- 并发提议导致冲突多： 考虑多个 Proposer都不断增加自己的Ballot Number，让其他Proposer的phase2不能顺利完成。会导致单个Instance的决议形成比较慢。
-
-### 做法
-
-- 简单来说，让一个Phase1 对应多个Phase 2。即：一个proposer用Ballot Number b1完成Phase1后，认为自己是leader，用b1去发送多个Instance的phase2。客户都会把提案交给 Leader去提议，除非认为Leader宕机了。
-- 对于每个Instance来说，哪个Proposer先提proposal，用的什么Ballot Number，都不影响正确性，只是做无用功或者阻止别人成功而已。Leader宕机或者别人认为它已经不是Leader，都不影响正确性。
-- 这里所说的Leader用一个Bal去完成多个Instance的Phase2，就是multi的含义。注意Multi Paxos是用来提升效率的，无关正确性。
-
 
 
 
