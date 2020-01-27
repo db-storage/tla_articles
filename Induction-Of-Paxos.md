@@ -14,17 +14,15 @@ Paoxs已经这么难懂，为什么还要用偏形式化的方法去说起推理
 
 理解本文的关键在于：理解投票安全性的含义，即上面的$SafaAt(b,v)$以及执行中如何始终保证它成立。即：如果每一次投票(即Phase2b)，都能保证$SafeAt(b,v)$，并且提议者能够保证$OneValuePerBallot$(每个Bal只有一个Value，从字面理解即可，相对比较简答)，那么就可以通过强归纳法得出，每次投票都是安全的，因此不可能形成两个不同的决议。注意，这个$SafeAt(b,v)$实际上是向更小的Ballot Number看的，**保证更小的Ballot Number不会形成不同的决议，**而不需要保证更大的Ballot Number怎么样。
 
-这里先放一张图，描述为什么Phase2a根据”1b“消息推导出$<b, v>$是安全的。后续会详细描述背后的原理。
-
-![2a](Figures/Phase2a.png)
+Lamport在讲座中提到，他当年大致就是按照“Consensus => Voting => Paxos” 一步步抽象来思考问题的，而不是一步到位，不过当年并没有形式化成Spec。
 
 本文主要组织如下(主要内容来自paxos相关的三个TLA + spec文件)：
 
-Ch1 从 Consensus.tla 抽取Consensus的形式化定义，即最终要保证的目标；Ch2是从Voting.tla抽取的对投票过程的模型化和推理，这个部分不考虑具体实现，讨论在投票过程只要满足哪些限定条件(不变式)，就能保证Conesensus；Ch3 开始涉及Paxos这个具体实现，用公式形式回顾Paxos的两个阶段；Ch4 讨论Paxos的两阶段如何满足了Ch2提出的限定条件，主要是"2a"。Ch5 是一些FAQ，虽然每章已经带一些FAQ，但是这些问题相对涉及的面更广。
+Ch1 从 Consensus.tla 抽取Consensus的形式化定义，即最终要保证的目标；Ch2是从Voting.tla抽取的对投票过程的模型化和正确性推理，这个部分不考虑具体实现，仅仅讨论在投票过程只要满足哪些限定条件(不变式)，就能保证Conesensus；Ch3 开始涉及Paxos这个具体协议，用公式形式回顾Paxos的两个阶段；Ch4 讨论Paxos的两阶段如何满足了Ch2提出的限定条件，主要是Phase2a。Ch5 是一些集中的FAQ。 
 
 # 1. "对的" 是啥含义？
 
-我们总觉得Paxos是”对的“，但是不知道为什么它是对的。那么怎么算”对的“？我们知道Paxos是一种共识协议，我们先看下Consensus的本身的定义：
+我们总觉得Paxos是”对的“，但是想不明白为什么。那么怎么算”对的“？我们知道Paxos是一种共识协议，我们先看下Consensus的本身的定义：
 
 - Consensus的定义：chosen的元素个数小于等于1。chosen是被选定的Value集合，下面会提到。
   $$
@@ -33,9 +31,9 @@ Ch1 从 Consensus.tla 抽取Consensus的形式化定义，即最终要保证的�
   \end{split}
   $$
 
-这里我们借用下式子描述定义，但是不会涉及chosen的赋值，实际在Spec中也没用显式赋值，而是根据形成Quorum 的"2b"消息的个数动态计算出来的。
+这里我们借用公式来描述定义，但是不会涉及chosen这个变量的赋值，实际在Spec中也没用显式赋值，而是根据形成Quorum 的"2b"消息的个数动态计算出来的。
 
-所以，共识协议可以理解成一种要求，而我们后面描述的Paxos实际上只是一种实现。
+所以，共识协议可以理解成一种最终的安全性要求，而我们后面描述的Paxos实际上只是一种实现。
 
 所谓**”对的“**，就是满足Consensus自身的定义，即不会选定$\ge2$个值。展开一下：
 
@@ -46,35 +44,38 @@ Ch1 从 Consensus.tla 抽取Consensus的形式化定义，即最终要保证的�
 
 
 
-# 2. Voting投票模型和正确性推导
+# 2. Voting模型和正确性推导
 
-下面这些定义不是Paxos两阶段的一部分，主要来自Voting.tla，这个TLA+ Spec是对Voting的更高层次的抽象，聚焦于正确性和抽象过程。其目的在于：理解投票过程中满足哪些更具体的限定条件，就可以保证Consensus。即：**过程中需要保证哪些限定条件，才能保证结果的正确性**。
+下面这些定义不是Paxos两阶段的一部分，主要来自Voting.tla，这个TLA+ Spec是对投票过程的抽象，聚焦于正确性。其目的在于：理解投票过程中满足哪些更具体的限定条件，就可以保证正确。
 
 ## 2.1 一些基本函数定义
 
-- VotedFor(a, b, v):  如果Acceptor a曾经Vote了选票($b$, $v$)，即发送过对应的”2b“消息，本函数为true。注意Voted/Accepted两个词会交换使用。
 
-- ChosenAt(b, v):  存在一个Quorum Q，Q里面每个Acceptor都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是ChosenAt的含义；
+$$
+\begin{split}VotedFor(a, b, v) \triangleq \space &<<b, v>> \in votes[a]\\ChosenAt(b, v) \triangleq \space  &\exists Q \in Quorum :   \\                   &  \forall a \in Q : VotedFor(a, b, v) \\chosen \triangleq &\{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\  DidNotVoteAt(a, b) \triangleq &\forall v \in Value : \lnot VotedFor(a, b, v) \\CannotVoteAt(a, b) \triangleq &\land maxBal[a] > b\\            &\land DidNotVoteAt(a, b)\\\end{split}
+$$
 
-- DidNotVoteAt(a, b):  Acceptor a 从未给 $Bal = b$ 的选票投票(**对历史的判断**)；
+### VotedFor(a,b,v)
 
-- CannotVoteAt(a, b)： Acceptor a 不能给任何 $Bal = b$的选票投票而且以前也没有投过(过去、现在和未来都不会给$Bal=b$的选票投票，**既有对历史的判断，也有承诺** )。即$maxBal[a] >b$并且DidNotVoteAt(a, b)。
-  $$
-  \begin{split}
-  VotedFor(a, b, v) \triangleq \space &<<b, v>> \in votes[a]\\
-  ChosenAt(b, v) \triangleq \space  &\exists Q \in Quorum :   \\
-                     &  \forall a \in Q : VotedFor(a, b, v) \\
-  chosen \triangleq &\{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\
-    
-  DidNotVoteAt(a, b) \triangleq &\forall v \in Value : \lnot VotedFor(a, b, v) \\
-  CannotVoteAt(a, b) \triangleq &\land maxBal[a] > b\\
-              &\land DidNotVoteAt(a, b)\\
-  \end{split}
-  $$
+- $VotedFor(a, b, v)$:  如果Acceptor a曾经Vote了选票($b$, $v$)，本函数为true。注意Voted/Accepted两个词会交换使用。
 
-约定：在后面的很多式子中，我们经常用到逻辑与($\land$)和逻辑或($\lor$)，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$，这一点对于状态变更很重要，因为只有条件成立才执行某个动作，而整体用一个逻辑表达式来表示。
+### ChosenAt(b, v)
 
-#### FAQ: 为什么需要 CannotVoteAt 里面要包含 DidNotVoteAt?
+- $ChosenAt(b, v)$:  存在一个Quorum Q，Q里面每个Acceptor都曾经投票给($b$, $v$)。我们常说的形成决议/形成多数派/选定一个值/Commit，都是ChosenAt的含义；
+
+### DidNotVoteAt(a, b)
+
+- $DidNotVoteAt(a, b)$:  Acceptor a 从未给 $Bal = b$ 的选票投票(**这是对历史的判断**)；
+
+### CannotVoteAt(a, b)
+
+- $CannotVoteAt(a, b)$： Acceptor a 承诺不会给任何 $Bal = b$ 的选票投票而且以前也没有投过(过去、现在和未来都不会给$Bal=b$的选票投票，**既有对历史的判断，也有承诺** )。即$maxBal[a] >b$并且DidNotVoteAt(a, b)。
+
+  约定：在后面的很多式子中，我们经常用到逻辑与($\land$)和逻辑或($\lor$)，它们与我们在关系代数中学到的含义一样。对于 $a \land b$，如果$a$的为false，则不会去尝试计算后面的$b$，这一点对于状态变更很重要，因为只有条件成立才执行后面的某个动作，而整体用一个逻辑表达式来表示。
+
+
+
+**FAQ: 为什么需要 CannotVoteAt 里面要包含 DidNotVoteAt?**
 
 - 如果不包含DidNotVoteAt，假设： 
   $$
@@ -85,7 +86,7 @@ Ch1 从 Consensus.tla 抽取Consensus的形式化定义，即最终要保证的�
   $$
   即Q1里面的成员虽然现在和未来不能再VoteFor(b, v)，但是之前已经都Vote过了，那么可能$ChosenAt(b,v)$早已经为true。
 
-### NoneOtherChoosableAt(b, v)  
+### NoneOtherChoosableAt(b, v) 
 
 $$
 \begin{split}
@@ -96,14 +97,14 @@ None&OtherChoosableAt(b, v) = \\
 $$
 
 - 意义: 除了v以外，不可能用 Bal b选定其他Value。
-- **注意**：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true或者false。即它只是阻止了部分他人成功，并没有肯定自己能成功。
+- **注意**：这个公式，只说别的value没法用b选定，**没有隐含$ChosenAt(b,v)$**一定为true或者false。即它只是阻止了部分他人成功，并没有肯定自己能成功被选定。
 - 实际判断方法: 存在一个Quorum Q，其中任意一个Acceptor a，要么已经投票给了<b, v>，即$VotedFor(a, b,v) = true$，要么没有为Bal b投票且承诺永远不会为Bal = b的选票投票。
 
 
 
-### SafeAt(b, v)   阻止更小的Bal形成冲突的决议
+### SafeAt(b, v)   不可能以更小的Bal形成冲突的决议
 
-- 含义： 不可能用小于b的某个Bal，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt 的 Bal范围定义到到一个区间$[0, b-1]$;
+- 含义： 不可能用小于b的某个Bal，选定v以外的任何值。这个本质上就是把NoneOtherChoosableAt 的 Bal范围定义到到一个区间$[0, b-1]$; 它也只是阻止别人成功，没有肯定自己会成功被选定。
 
 - 注意：不能被选定，**不代表不能被Accept/Vote**，只要Vote不形成Quorum即可;
 
@@ -147,19 +148,22 @@ $$
 
 ## 2.2 保证Consensus的充分条件
 
-1. VotesSafeImpliesConsistency:  只要保证$VotesSafe$ 和 $OneVote$，就能保证 Consensus。
-   $$
-   \begin {split}Votes& SafeImpliesConsistency  \triangleq \\          & \land VotesSafe \\          & \land OneVote \\          & => \qquad \lor chosen = \{\} \\             & \qquad \qquad \lor \exists v \in Value : chosen = \{v\}\end{split}
-   $$
-   
-
-2. OneVote:  OneValuePerBallot 蕴含了 OneVote。
-
-    
+VotesSafeImpliesConsistency的含义： 只要保证$VotesSafe$ 和 $OneVote$，就能保证 Consensus。
+$$
+\begin {split}Votes& SafeImpliesConsistency  \triangleq \\          & \land VotesSafe \\          & \land OneVote \\          & => \qquad \lor chosen = \{\} \\             & \qquad \qquad \lor \exists v \in Value : chosen = \{v\}\end{split}
+$$
+OneVote:  同一个Ballot的Value必定是相同的，实际上OneValuePerBallot 已经蕴含了 OneVote。
+$$
+\begin{split}
+OneVote \triangleq \forall a \in &Acceptor, b \in Ballot, v, w \in Value : \\
+              &VotedFor(a, b, v) \land VotedFor(a, b, w) => (v = w)
+              \end{split}
+$$
+ 
 
 ## 2.2.1 反证法
 
-假设VotesSafeImpliesConsistency不成立，即上述的$VotesSafe$ 和 $OneVote$不能保证 Consensus，会选定两个或者多个不同的Value，也就是下面的式子成立：
+假设VotesSafeImpliesConsistency不成立，即在保证$VotesSafe$ 和 $OneVote$的前提下，仍然会选定两个或者多个不同的Value，后者用式子表示为：
 $$
 \begin{split}
 \exists b_1, b_2 & \in Ballot, v_1, v_2 \in Value: \\
@@ -171,7 +175,7 @@ $$
 
 #### **Case 1:** $b_1\neq b_2$
 
-不失一般性，假设$b_1>b_2$。根据$Votessafe$的定义， $ChosensAt(b_1, b_1) => SafeAt(b_1, v_1)$，后者展开为：
+不失一般性，假设$b_1>b_2$。根据 $VotesSafe$ 的定义， $ChosenAt(b_1, v_1) => SafeAt(b_1, v_1)$，而后者展开为：
 $$
 \begin{split}
 SafeAt(b_1, v_1) &\triangleq \\ 
@@ -182,19 +186,19 @@ $$
 
 #### **Case 2:** $b_1=b_2$
 
-这与 OneValuePerBallot矛盾，不会出现。
+这与 OneVote矛盾，不会出现。
 
 
 
 ## 2.3 如何产生满足Inv的Value？
 
-$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是没有告诉我们怎么去产生有效的<b, v>。但是如果不知道可以产生什么样的$<b, v>$，那么，就没法有效运转。 
+$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是说明怎么去产生有效的<b, v>。但是如果不知道可以产生什么样的$<b, v>$，就没法高效地运转。 
 
-先不考虑具体协议。假设Proposer有上帝视角，可以看到所有 Acceptor的状态，怎么产生一个满足Inv 的$<b, v>$ ?  实际上基于下面的定理：
+先不考虑具体协议。假设Proposer有上帝视角，可以看到所有 Acceptor的状态，怎么产生一个满足不变式 Inv 的$<b, v>$ ?  实际上基于下面的定理：
 
 ### ShowsSafety 定理
 
-含义：即在保证 $VotesSafe$ 和 $OneValuePerBallot$的前提下，满足 $ShowsSafeAt(Q, b, v)$ 的 $<b, v>$，就是安全的，因为蕴含了$SafeAt(b, v)$。
+含义：在保证 $VotesSafe$ 和 $OneValuePerBallot$的前提下，满足 $ShowsSafeAt(Q, b, v)$ 的 $<b, v>$，就是安全的，它蕴含了$SafeAt(b, v)$。
 $$
 \begin{split}定理 Shows&Safety  \triangleq \\ &\land VotesSafe \\&\land OneValuePerBallot \\&  \quad =>   \forall Q \in Quorum, b \in Ballot, v \in Value :\\& \qquad \qquad \qquad    ShowsSafeAt(Q, b, v) => SafeAt(b, v)            \end{split}
 $$
@@ -211,20 +215,20 @@ $$
 $$
 
 - 含义：存在一个Quorum Q，同时满足下面的Cond 1和Cond2：
-- **Cond 1:** Q 内任意一个Acceptor a，满足$maxBal[a] >= b$，即承诺不再给$<=b$的Bal投票；
+- **Cond 1:** Q 内任意一个Acceptor a，满足$maxBal[a] >= b$，注意这实际上是承诺；
 - **Cond2:** 存在一个小于 b 的Ballot Number c，同时满足下面两个限定条件：
-  - **Cond 2.1:** 如果 $c \ne -1$，需要满足：Q中至少有一个Acceptor a, a给(b, v)投过票。注意，如果 $c = -1$，则本限定条件为空，这是一个特殊场景，即所有Acceptor都没有投过票。
-  - **Cond 2.2:** Q 中没有任何Acceptor a，给[c+1, b-1]之间的任何Bal投过票。即Q里面的所有 Acceptor在[c+1, b-1]这个区间，都完全没有投票。
+  - **Cond 2.1:** 如果 $c \ne -1$，需要满足：Q中至少有一个Acceptor a给(b, v)投过票。注意，如果 $c = -1$，则本限定条件为空，这是一个特殊场景，即所有Acceptor都没有投过票。
+  - **Cond 2.2:** Q 中没有任何Acceptor a，给[c+1, b-1]之间的任何Bal投过票(DidNotVoteAt)。即Q里面的所有 Acceptor在[c+1, b-1]这个区间，都完全没有投票。
 
 其中：
 
-- Cond 1和Cond 2.2 保证了[c+1, b-1]这个区间不可能选定任何Value(简单理解：一大半人都承诺不选了)；
+- Cond 1和Cond 2.2 的结合，保证了Q里面所有Acceptor在$[c+1, b-1]$这个区间的CannotVoteAt成立，所以这个区间不可能选定任何Value；
 
-- Cond 2.1的定义，如果c不等于-1，则有$VotedFor(a,c,v)$，那么投票时已经保证了$SafeAt(c,v)$；而 $VotedFor(a,c,v)$ 和 $OneValuePerBallot$，保证了$NoneOtherChoosableAt(c, v)$；
+- Cond 2.1的定义，如果 $c \ne -1$，则有$VotedFor(a,c,v)$，那么根据$VotesSafe$前提，它已经蕴含了$SafeAt(c,v)$；而 $VotedFor(a,c,v)$ 和 $OneValuePerBallot$，保证了$NoneOtherChoosableAt(c, v)$；
 
   
 
-为了便于描述，我们定义另外一个式子(不是来自于Paxos的Spec)：
+为了便于下面画图，我们定义另外一个式子(不是来自于Paxos的Spec)：
 $$
 \begin{split} Cannot&VoteBetween(a, start, end) \triangleq \\   
 &\forall b \in [start+1, end-1]: CanntVoteAt(a, b) 
@@ -239,6 +243,8 @@ $$
 \end{split}
 $$
 
+
+
 ![2a](Figures/Phase2a.png)
 
 
@@ -252,7 +258,7 @@ $$
 & \qquad \land CannotVoteBetwwn(a, b_1, b)
 \end{split}
 $$
-**为了满足Cond2.2，$c$ 必须取最大值，即 $c = b_1$**。据此可以推导出  $SafeAt(Q, b, v_1)$，具体见下一节。
+**为了满足Cond2.2，$c$ 必须取这几个Bal的最大值，即 $c = b_1$**。据此可以推导出  $SafeAt(Q, b, v_1)$，具体见下一节。
 
 考虑特殊情况，$b_1=b_2=b_3=-1$，那么取$c=-1$，由于$[0,b-1]$区间不可能选定任何Value，所以无论给定的v是什么，都能满足  $ShowsSafeAt(Q, b, v)$。
 
@@ -260,7 +266,7 @@ $$
 
 ### 从ShowsSafeAt 推导 SafeAt
 
-**在保证 $VotesSafe$ 和 $OneValuePerBallot$的前提下，从SafeAt的本意去理解和推导**。继续按照上面的例子来思考，$ShowsSafeAt(Q, b, v)$ 能否保证 $SafeAt(b, v)$?  回顾下$SafeAt$的式子：
+**在保证 $VotesSafe$ 和 $OneValuePerBallot$的前提下，从SafeAt的本意去理解和推导**。继续按照上面的例子来思考，$ShowsSafeAt(Q, b, v)$ 能否保证 $SafeAt(b, v)$?  回顾下$SafeAt$的定义：
 $$
 \begin{split}SafeAt(b, v) &\triangleq \\ &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)\end{split}
 $$
@@ -272,8 +278,11 @@ $$
 #### (A). 区间$[0, b_1-1]$
 
 由于已知$VoteFor(a_1, b_1, v_1)$为true，根据$VotesSafe$，它隐含了$SafeAt(b_1, v_1)$为true。根据$SafeAt$的定义，成立。
-
-$VotesSafe \land VoteFor(a_1, b_1, v_1) => SafeAt(b_1,v_1)$
+$$
+\begin{split}
+VotesSafe \land VoteFor(a_1, b_1, v_1) => SafeAt(b_1,v_1)
+\end{split}
+$$
 
 #### (B). 区间$[b_1, b_1]$
 
@@ -300,15 +309,15 @@ $$
 
 #### FAQ：ShowsSafeAt的物理意义是什么？
 
-对应到后面的paxos，它就是Proposer判断是否可以发送”2a“消息以及应该提议的哪个Value的实际判断条件。
+对应到后面的paxos，它就是Proposer判断是否可以发送”2a“消息以及应该提议哪个Value实际判断条件。
 
 
 
 #### FAQ:  ShowsSafety的含义？
 
-这个定理表明，如果之前所有操作都满足了Inv，只要某个Acceptor a判断$ShowsSafeAt(Q, b, v)$成立，就可以推导出$SafeAt(b, v)$，从而可以投票。
+这个定理表明，如果之前所有操作都满足了Inv，只要Acceptor a判断$ShowsSafeAt(Q, b, v)$成立，就可以推导出$SafeAt(b, v)$。
 
-到目前为止，我们尚没有提及paxos的任何内容。但是我们知道从上帝视角看，怎样的投票是安全的，以及如何去产生$<b, v>$。下面我们将回忆下paxos的两个阶段，然后梳理下paxos如何满足$VotesSafe$ 和 $OneValuePerBallot$。
+到目前为止，我们尚没有提及paxos的任何内容。但是我们知道：从上帝视角看，满足什么条件的投票是安全的，以及如何去产生$<b, v>$。下面我们将回忆下paxos的两个阶段，然后梳理下paxos如何满足$VotesSafe$ 和 $OneValuePerBallot$。
 
 
 
@@ -316,15 +325,15 @@ $$
 
 这一部分回顾下"Paxos Made Simple"一文的描述的Paxos的两个阶段。但是从具体形式上，使用了公式化描述。这些公式来自[3]。
 
-下面这些描述，与Paper里面描述的还是有所区别的，主要包括以下方面：
+不过下面这些形式化描述，与Paper里面描述的还是有所区别的，主要包括以下方面：
 
 - 没有具体的Proposer角色，Phase1a和Phase2a都没有体现出哪个Proposer在执行；
-- 由于没有体现Proposer角色，与实际系统产生了差异，尤其是消息的可见性。比如Phase2a会检查是$msgs$里面是否有相同Bal的"2a"消息，这个在实际的多Proposer系统中是没法保证可见的，更不用说原子性。
-- 我们在后面推导OneValuePerBallot时，并没有依赖于这种全局的消息可见性，而是假设Proposer存在，且仅仅依赖于每个Proposer自己能看到的消息以及承诺。
+- 由于没有体现Proposer角色，与实际系统产生了差异，尤其是消息的可见性。比如Phase2a会判断是$msgs$里面是否有相同Bal的"2a"消息，这个在实际的多Proposer系统中是没法保证可见的，更不用说原子性。
+- 我们在后面推导OneValuePerBallot时，并没有依赖于这种全局的消息可见性，而是假设Proposer存在，仅要求每个Proposer能看到发给自己的消息。
 
 ## 3.1 常量和变量定义部分
 
-我们先抽取一些必要的变量和常量定义 ，Set和Map跟编程语言中场景概念相同。这些对于有计算机或者数学基础的读者应该不难 。其中常量是需要预先给定值的。
+我们先抽取一些必要的变量和常量定义 ，Set和Map与编程语言中的概念相同。这些对于有计算机或者数学基础的读者不难。其中常量是需要预先给定值的。
 
 | 名称     | 类型 | 含义                                                         |
 | -------- | ---- | ------------------------------------------------------------ |
@@ -334,7 +343,7 @@ $$
 | maxVBal  | Map  | 即Max Voted Ballot。maxVBal[a]表示acceptor a曾经Vote过的最大的Ballot Number，在phase2b修改。**只增不减**。 |
 | maxVal   | Map  | 即Max Voted Value。 maxVal[a]表示acceptor a曾经Vote过的最大的Ballot Number对应的Value，在phase2b修改。<"2b", a, maxVBal[a], maxVal[a]>构成了一个Phase2b消息四元组。 |
 | Votes    | Map  | votes[a] 记录acceptor a曾经accept/vote过的<Bal, Value>元组   |
-| msgs     | Set  | 所有发过的消息集合(在Paxos的TLA+ Spec中，msg不删除)          |
+| msgs     | Set  | 所有发过的消息集合(在Paxos的TLA+ Spec中，所有消息放在一起，且不删除) |
 | Chosen   | Set  | 被选定的Value的集合                                          |
 
 
@@ -369,17 +378,17 @@ $$
 &\forall Q \in Quorum : Q \neq \{\} \\\end{split}
 $$
 
-感兴趣的读者可以自己计算下，要满足上面的式子，Q1, Q2的成员个数**不一定**都需要达到Acceptor的半数以上，它们的成员个数也不一定是相等的。虽然在实际应用中都简化为多数派。
+感兴趣的读者可以自己计算下，要满足上面Assumption的式子，Q1, Q2的成员个数**不一定**都需要达到Acceptor的半数以上，它们的成员个数也不一定是相等的。虽然在实际应用中往往都简化为多数派。
 
 
 
 ## 3.2 Phase1a
 
-Phase1a即Proposer给各个Acceptor发送"1a"消息，参数b为Ballot Number。
+Phase1a即Proposer给各个Acceptor发送"1a"消息，其中参数b为Ballot Number。
 
 **发送Phase1a无需任何前提条件**，直接发送1a消息，它不带有任何承诺，随意发送也不会引起正确性问题。注意"1a"消息，是一个二元组。
 
-”UNCHANGED“是TLA+ spec的语法，说名某些变量不变，保留这些只是为了保持式子的完整性，读者可以忽略这些“UNCHANGED” 部分，后面很多地方也省略了。
+”UNCHANGED“是TLA+ spec的语法，说名某些变量不变，放这里只是为了保持式子的完整性，读者可以忽略这些“UNCHANGED” 部分。
 $$
 \begin{split}
 Phas&e1a(b) \triangleq \\
@@ -394,13 +403,13 @@ Send(m) &\triangleq \\
 & msgs' = msgs \cup \{m\}
 \end{split}
 $$
-在Paxos的TLA+ spec里面，没有模拟多个通信信道，而是把所有msg放到一个集合(msgs)里面，通过type和bal来区分。Send(m)就是修改msgs，使得msgs的新状态为：msgs和{m}的并集。
+在Paxos的TLA+ spec里面，没有模拟多个通信信道，而是把所有msg放到一个集合(msgs)里面，通过type和bal等来区分。Send(m)就是修改msgs的状态为：$msgs$和$\{m\}$的并集。
 
-$msgs'$的含义：在状态机中，变量$msg$的下一个状态的值。其他变量也类似。
+$msgs'$的含义：在状态机中，变量$msgs$的下一个状态的值。其他变量也用这个方式表示状态变化。
 
 ## 3.3 Phase1b
 
-Phase1b过程，是Acceptor a根据自己的变量去判断，能否响应一个 Phase1a消息，如果符合条件，则发送一个"1b"消息。参数 a是Acceptor自己的标识。
+Phase1b过程，是Acceptor a根据自己的变量去判断，是否应该响应一个 “1a”消息，如果符合条件，则回复一个"1b"消息。参数 a是Acceptor自己的标识。
 $$
 \begin{split}
 Phase&1b(a) \triangleq \\
@@ -413,7 +422,7 @@ Phase&1b(a) \triangleq \\
 $$
 
 
-其中最重要的前提条件是：存在一个 类型是"1a"的消息m，$m.bal > maxBal[a]$。
+其中最重要的前提条件是：存在一个类型为"1a"的消息m，$m.bal > maxBal[a]$。
 
 注意，在前提成立的情况下，Phase1b做了两件事(其他所有变量都是Unchanged)：
 
@@ -421,9 +430,9 @@ $$
 
 2) 构建 "1b"消息四元组:$ <"1b", a, m.bal, maxVBal[a], maxVal[a]>$。注意如果a从未成功执行过phase2b，$maxVBal[a]$就是-1，此时$maxVal[a]$为空 。
 
-3) Send  “1b"消息，Send的具体操作在前面有解释。**注意：** Phase1b等每个操作都被认为是原子的，一旦发送了"1b"，$maxBal[a]$ 必然也增加了。如果下次再收到相同Bal的"1a"消息m，$m.bal > maxBal[a]$ 这个前提条件就不成立了，不会再回复"1b"，这是OneValuePerBallot的基础。
+3) Send  “1b"消息。**注意：** Phase1b等每个操作都被认为是原子的，一旦发送了"1b"，$maxBal[a]$ 必然也增加了。如果下次再收到相同Bal的"1a"消息m，$m.bal > maxBal[a]$ 这个前提条件就不成立了，不会再回复"1b"，**这是OneValuePerBallot的基础**。
 
-后面会看到多个类似下面的式子（phase1b也属于这种），只有前提条件成立时，才执行修改。"UNCHANGED"部分在理解本文时可以跳过，只是为了保持式子完整性而保留。
+后面会看到多个类似下面的式子（phase1b也属于这种），只有前提条件成立时，才执行状态变更。"UNCHANGED"部分在理解本文时可以跳过，只是为了保持公式完整性而保留在这里。
 $$
 \begin{split}
 State&Change \triangleq \\
@@ -471,7 +480,10 @@ $$
 
 上面式子中，发送消息$<"2a", b, v>$前确认 $<b, v>$是否安全的部分，对比下2.3节的$ShowsSafeAt(Q, b, v)$公式和图，它们实际上是相同的，只是上面的判断是基于看到的“1b”消息。
 
-$Q1bv$为空集合时，上面的式子中没有对$v$做任何限制。但是实际上在整个状态机的Next函数中，已经在外围做了限制，即 $v\in Value$。
+与$ShowsSafeAt(Q,b, v)$的对应：
+
+- $Q1bv$为空集合时，它对应$ShowsSafeAt(Q,b, v)$ 中 $c=-1$ 的分支。上面的式子中没有对$v$做任何限制，但是实际上在整个状态机的Next函数中，已经在外围做了限制，即 $v\in Value$。
+
 $$
 \begin{split}
 Next \triangleq &\lor \exists b \in Ballot : \lor Phase1a(b)\\
@@ -479,14 +491,20 @@ Next \triangleq &\lor \exists b \in Ballot : \lor Phase1a(b)\\
         & \lor \exists a \in Acceptor : Phase1b(a) \or Phase2b(a)
         \end{split}
 $$
-**FAQ： 为什么对于同一个Bal b，不能两次执行phase2a?**
+
+- $Q1bv$非空时，对应了$ShowsSafeAt(Q,b, v)$ 中 $c \neq -1$ 的分支，取$mbal$最大值及对应的$mbal$。
+
+**FAQ： 上面式子中，为什么通过前提条件的1)，来避免两次执行phase2a?**
 
 - 因为Value可能是Proposer自己决定的，而Paxos的Spec 里面的msg全部保留不删除。如果执行两次，$ShowsSafeAt(Q, b, v)$可能两次都成立，这样两次会生成不同的Value，导致OneValuePerBallot被违背。
 
-**FAQ: 实际上的paxos实现，一个Poposer如何确定是否有其他 Proposer用相同的 Ballot  b执行过Phase2a?**
+**FAQ: 实际上的paxos实现，一个Poposer如何判断前提条件1)是否成立?**
 
-- 在有多个Proposer的情况下，这个是没法保证的，也不应该依赖于这个条件。
-- OneValuePerBallot实际上依赖于Phase1b的承诺。
+- 在有多个Proposer的情况下，这个是没法判断的，不是所有消息都对所有 Proposer可见。
+
+- OneValuePerBallot实际上依赖于自己收到的"1b"消息的承诺，而不是检查已有的"2a"消息，后面讨论正确性时有具体讨论。
+
+  
 
 ## 3.5 Phase2b
 
@@ -494,9 +512,9 @@ $$
 
 ### 前提条件
 
-​    存在一个"2a"消息m，满足 $m.bal \geq maxBal[a]$。 
+​    存在一个"2a"消息m，且满足 $m.bal \geq maxBal[a]$。 
 
-​    注意：这里的判断条件不Phase1b是不同的，允许Accept同一个"2a"两次。
+​    注意：这里的判断符号是$\geq$，与Phase1b是不同的，
 
 ### 修改本Acceptor的变量
 
@@ -508,7 +526,7 @@ $$
 
 ### 发送"2b"消息(即Vote)
 
-   "2b"消息带有Acceptor的ID(参数a)，包含从"2a"消息m里面获取的$m.bal$和$m.val$ 。具体为四元组$<"2b", a, m.bal, m.val>$。 注意这些都用了EXCEPT语法，只修改map的一个成员，其他成员不变。
+  "2b"消息带有Acceptor的ID(参数a)，包含从"2a"消息m里面获取的$m.bal$和$m.val$ 。具体为四元组$<"2b", a, m.bal, m.val>$。 注意这些都用了EXCEPT语法，即只修改map的一个成员，其他成员不变。
 $$
 \begin{split}
 Phase2b(a) \triangleq \exists m \in msgs : &\land m.type = "2a"\\
@@ -529,9 +547,9 @@ $$
 
 # 4. Paxos的正确性
 
-本章先描述下Paxos各个消息隐含的承诺，然后讨论Paxos过程如何满足Voting模型的不变式，以及如何保证Voting模型里面的Inv一直成立。这是因为前面的ShowsSafety定理依赖于Inv。
+本章先描述下Paxos各个消息隐含的承诺，然后讨论Paxos协议过程如何满足Voting模型的不变式。这是因为前面的ShowsSafety定理依赖于Inv。
 
-在paxos.tla中，有一个定义和定理如下。其基本含义是：Paxos在运行过程中，必须要满足Voting模型里面的不变式Inv (**两个模型里面的同名变量和常量，例如Acceptor， Value，都是共用的**)。
+在paxos.tla中，有一个定义和定理如下。其基本含义是：Paxos在运行过程中，必须要满足Voting模型里面的不变式Inv。这里不用理解其语法，只需要知道含义即可。
 $$
 \begin{split}
 V \triangleq INSTANCE \space Voting \\
@@ -542,37 +560,37 @@ $$
 
 ## 4.1 各个消息隐含的承诺
 
-### Phase1a消息 : <"1a", b>:
+### “1a”消息 : $<"1a", b>$
 
-- 它本身无任何保证，随便发送。
+- 它本身无任何保证或者承诺，发送不影响正确性。
 
-### Phase1b消息: $<"1b", a, b, maxVBal[a], maxBal[a]>$：
+### "1b"消息: $<"1b", a, b, maxVBal[a], maxVal[a]>$
 
 - 记录了$maxBal[a]'=b$，**承诺a不会再响应任何 $Bal <= m.bal$的Phase1a，**承诺a不会Accept任何 $Bal <m.bal$的Phase2a；
-- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxBal[a], maxVBal[a])$  ，它**如实转达**了$SafeAt(maxBal[a], maxVBal[a])$；如实转达也可以认为是兑现承诺，参见phase2b描述；
+- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxVBal[a], maxVal[a])$  ，它**如实转达**了$SafeAt(maxVBal[a], maxVal[a])$；
 - 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a，这可以认为是个特殊场景；
 
 **因此，Phase1b实际上隐含了**：
 
-​                 $CannotVoteBetween(a, maxVBal[a], b) \land SafeAt(maxBal[a], maxVBal[a])$  
+​                 $CannotVoteBetween(a, maxVBal[a], b) \land SafeAt(maxVBal[a], maxVal[a])$  
 
 其中前一部分是a的承诺，后面的SafeAt是转达已有的Vote。
 
 
 
-### Phase2a: $phase2a(b, v)$ :
+### "2a"消息: $<"2a",b,v>$
 
 - 保证了$SasfAt(b, v)$
 
-  Proposer在收到了某个Quorum Q的所有成员的Phase1b后，判断$ShowsSafeAt(Q, b, v)$成立 ，才发送$<b,v>$，蕴含了$SafeAt(b, v)$。
+  Proposer判断$ShowsSafeAt(Q, b, v)$成立 ，才发送$<b,v>$，蕴含了$SafeAt(b, v)$。
 
   
 
 
-### Phase2b: $phase2b(a, b, v)$：
+### "2b": $<"2b",a, b, v>$
 
-- 记录了$maxBal[a]'=b$，具体承诺内容参见Phase1b的相应描述。如果这个acceptor正好也发送过对应的phase1b，那么已经承诺过。
-- 记录了$maxVBal[a]'=b, maxVal[a]=v'$，按照前面的讨论，这个式子隐含了$SafeAt(b, v)$。这个记录也表示a**承诺会如实转达**$SafeAt(b,v)$给后续的Bal 更大的Phase1请求。
+- 记录了$maxBal[a]'=b$，具体承诺内容参见"1b"的相应描述。如果这个acceptor正好也发送过对应的phase1b，那么已经承诺过。
+- 记录了$maxVBal[a]'=b, maxVal[a]'=v$，按照前面的讨论，这个式子隐含了$SafeAt(b, v)$。这个记录也表示a**承诺会如实转达**$SafeAt(b,v)$。
 
 
 
@@ -586,7 +604,7 @@ Phase1b和Phase2b都有自己的前提条件，比如 Acceptor a 在Phase1b修�
 
 Voting模型的Inv就是 $OneValuePerBallot \land VotesSafe$。Paxos在执行过程中，保证不变式Inv在每一步都成立。而下一步执行后的成立，依赖于其执行前所有步骤已经满足Inv。
 
-由于$VotesSafe$和$OneValuePerBallot$都是对已发送所有投票的限定条件，而新的状态如果会产生新的投票，也会成为被约束的对象。因此，被Inv约束的对象是不断变化的，本身是个滚动过程。
+由于$VotesSafe$和$OneValuePerBallot$都是对已发生的所有投票的限定条件，而新的状态如果会产生新的投票，也会成为被约束的对象。因此，被Inv约束的对象是不断变化的，其本身是个滚动过程。
 
 #### 4.4.1 Paxos如何保证 OneValuePerBallot？
 
@@ -602,7 +620,7 @@ OneValuePerBallot由于只涉及同一个Bal的比较，相对独立，先用反
 
 所以，Paxos协议能保证OneValuePerBallot 恒成立。
 
-注意： 在回顾Paxos时，我们已经提到Paxos的Spec与实际上系统有差异，没有体现出proposer。这里没有依赖于$msgs$的全局可见性，而是按照每个proposer可见的消息来推导。
+注意：上面的反证法没有依赖于$msgs$的全局可见性，而是按照实际系统中每个Proposer可见的消息来推导。在回顾Paxos时，我们曾经提到Paxos的Spec为了简化，与实际上系统有差异，没有体现出多个Proposer，依赖于$msgs$的全局可见性。
 
 ### 4.4.2 Paxoss如何保证 Inv?
 
@@ -612,11 +630,11 @@ OneValuePerBallot由于只涉及同一个Bal的比较，相对独立，先用反
 $$
 \begin{split}VotesSafe \triangleq &\forall a \in Acceptor, b \in Ballot, v \in Value : \\              &VotedFor(a, b, v) => SafeAt(b, v)\end{split}
 $$
-**思路**：在 Phase2a 产生选票(”2a"消息)时，就要保证安全性，后续该选票无论是否被Accept都不影响安全性。我们要推导的是：每一次 Phase2a 执行时，如果在执行前 Inv 成立，在执行后  Inv 也成立。
+**思路**：在 Phase2a 产生选票(”2a"消息)时，就要保证安全性，该选票无论是否被Accept都不影响选票的安全性。我们要推导的是：考察每一次 Phase2a 的执行，如果在执行前 Inv 成立，在执行后 Inv 也成立。其中一个关键点是：Phase2a确定Value的过程，就是判断$ShowsSafeAt(Q,b, v)$成立的过程。
 
-- 由于执行过程中总有一个选票是第一个被产生的。不妨假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，不可能有任何一个投票(Phase2b)被Accept过，因此必然满足 VotesSafe。根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_1, v_1)$已经蕴含了$SafeAt(b_1, v_1)$。因此本步骤执行后 Inv 依然成立。
-- 假设第2个执行Phase2a的选票是$<b_2, v_2>$，也就是说它之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Vote过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，而$SafeAt(b_1, v_1)$已经成立，$Phase2a(b_2, v_2)$被执行时，根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_2, v_2)$蕴含了$SafeAt(b_2, v_2)$ 。因此本步骤执行后 Inv 依然成立。
-- 强归纳法：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论这些选票分别被Vote了多少次。所以本步骤执行前Inv成立。根据$ShowsSafety$定理, $ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$蕴含了$SafeAt(b_n, v_n)$，因此本步骤执行后Inv依然成立。
+- 由于执行过程中总有一个选票是第一个被产生的。不妨假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，还没有任何选票，不可能有任何一个投票发生过，因此VotesSafe成立。根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_1, v_1)$蕴含了$SafeAt(b_1, v_1)$。因此本步骤执行后只有这一个可能的选票, 它是安全的，故Inv 依然成立。
+- 假设第2个执行Phase2a的产生的选票是$<b_2, v_2>$，也就是说它之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Accept过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，此时Inv(含VotesSafe)成立。$Phase2a(b_2, v_2)$ 被执行时，根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_2, v_2)$蕴含了$SafeAt(b_2, v_2)$ 。因此本步骤执行后只有2个选票，它们都是安全的，故Inv 依然成立。
+- 强归纳法：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论这些选票分别被Vote了多少次。所以本步骤执行前Inv成立。根据$ShowsSafety$定理, $ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$蕴含了$SafeAt(b_n, v_n)$，因此本步骤执行后执行后只有n个选票，它们都是安全的，故Inv依然成立。
 
 
 
@@ -640,7 +658,7 @@ $$
 
 ## 4.5 一张图回顾下整体过程
 
-下面一张图较完整地说明了两阶段的过程，主要强调各个消息的含义。为了方便，只画出了两个acceptor $a_1, a_2$。注意橙色底色的是消息隐含的承诺/转达。为了简化，图中没有体现一些变量的变化(例如$maxBal$。这里假设 $\{a1, a2\}$是一个Quorum，且$b1>b2$，P0在收到两个 phase1b后，就可以推导出$SafeAt(b, v_1)$。
+下面一张图较完整地说明了两阶段的过程，主要强调各个消息的含义。为了方便，只画出了两个acceptor $a_1, a_2$。注意橙色底色的是消息隐含的承诺或者转达。为了简化，图中没有体现一些变量的变化(例如$maxBal$)。这里假设 $\{a1, a2\}$是一个Quorum，且$b1>b2$，P0在收到两个 "1b"消息后，就可以推导出$SafeAt(b, v_1)$。
 
   ![allinone](Figures/AllInOne.png)
 
