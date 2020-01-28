@@ -380,7 +380,9 @@ $$
 
 感兴趣的读者可以自己计算下，要满足上面Assumption的式子，Q1, Q2的成员个数**不一定**都需要达到Acceptor的半数以上，它们的成员个数也不一定是相等的。虽然在实际应用中往往都简化为多数派。
 
+在TLA+ Spec中，每一个步骤都被认为是原子的，而整个分布式系统的运行，被认为是一系列步骤/状态变更组成的序列。具体到paxos的Spec，Phase1a, Phase1b, Phase2a, Phase2b这些步骤都被认为是原子的。状态变更不一定对应单个指令，对于分布式系统，一个状态变更可以由多个指令组成，只要能够保证这些指令不受其它指令的影响并且可以保证原子性即可。
 
+//TODO: 怎么确定原子性？
 
 ## 3.2 Phase1a
 
@@ -480,7 +482,7 @@ $$
 
 上面式子中，发送消息$<"2a", b, v>$前确认 $<b, v>$是否安全的部分，对比下2.3节的$ShowsSafeAt(Q, b, v)$公式和图，它们实际上是相同的，只是上面的判断是基于看到的“1b”消息。
 
-与$ShowsSafeAt(Q,b, v)$的对应：
+#### 与$ShowsSafeAt(Q,b, v)$的对应：
 
 - $Q1bv$为空集合时，它对应$ShowsSafeAt(Q,b, v)$ 中 $c=-1$ 的分支。上面的式子中没有对$v$做任何限制，但是实际上在整个状态机的Next函数中，已经在外围做了限制，即 $v\in Value$。
 
@@ -494,11 +496,11 @@ $$
 
 - $Q1bv$非空时，对应了$ShowsSafeAt(Q,b, v)$ 中 $c \neq -1$ 的分支，取$mbal$最大值及对应的$mbal$。
 
-**FAQ： 上面式子中，为什么通过前提条件的1)，来避免两次执行phase2a?**
+FAQ： 上面式子中，为什么通过前提条件的1)，来避免两次执行phase2a?
 
 - 因为Value可能是Proposer自己决定的，而Paxos的Spec 里面的msg全部保留不删除。如果执行两次，$ShowsSafeAt(Q, b, v)$可能两次都成立，这样两次会生成不同的Value，导致OneValuePerBallot被违背。
 
-**FAQ: 实际上的paxos实现，一个Poposer如何判断前提条件1)是否成立?**
+FAQ:  实际上的paxos实现，一个Poposer如何判断前提条件1)是否成立?
 
 - 在有多个Proposer的情况下，这个是没法判断的，不是所有消息都对所有 Proposer可见。
 
@@ -514,7 +516,7 @@ $$
 
 ​    存在一个"2a"消息m，且满足 $m.bal \geq maxBal[a]$。 
 
-​    注意：这里的判断符号是$\geq$，与Phase1b是不同的，
+​    注意：这里的判断符号是$\geq$，与Phase1b是不同的。
 
 ### 修改本Acceptor的变量
 
@@ -524,7 +526,7 @@ $$
 
 ​       $maxVal[a]'= m.val$
 
-### 发送"2b"消息(即Vote)
+### 发送"2b"消息(即投票)
 
   "2b"消息带有Acceptor的ID(参数a)，包含从"2a"消息m里面获取的$m.bal$和$m.val$ 。具体为四元组$<"2b", a, m.bal, m.val>$。 注意这些都用了EXCEPT语法，即只修改map的一个成员，其他成员不变。
 $$
@@ -539,7 +541,7 @@ Phase2b(a) \triangleq \exists m \in msgs : &\land m.type = "2a"\\
 \end{split}
 $$
 
-**FAQ:  为什么Phase1b和Phase2b都修改 $maxBal[a]'$** ？ 
+FAQ:  为什么Phase1b和Phase2b都修改 $maxBal[a]'$ ？ 
 
 - 因为执行Phase2b的Acceptor，之前不一定执行了Phase1b 。
 
@@ -547,9 +549,9 @@ $$
 
 # 4. Paxos的正确性
 
-本章先描述下Paxos各个消息隐含的承诺，然后讨论Paxos协议过程如何满足Voting模型的不变式。这是因为前面的ShowsSafety定理依赖于Inv。
+本章先描述下Paxos各个消息隐含的承诺，然后讨论Paxos协议过程如何满足不变式Inv。这是因为ShowsSafety定理依赖于Inv。
 
-在paxos.tla中，有一个定义和定理如下。其基本含义是：Paxos在运行过程中，必须要满足Voting模型里面的不变式Inv。这里不用理解其语法，只需要知道含义即可。
+在paxos.tla中，有一个定义和定理如下。其基本含义是：Paxos在运行过程中，必须要满足Voting模型里面的不变式Inv。这里不用理解具体语法，只需要知道含义即可。
 $$
 \begin{split}
 V \triangleq INSTANCE \space Voting \\
@@ -562,19 +564,19 @@ $$
 
 ### “1a”消息 : $<"1a", b>$
 
-- 它本身无任何保证或者承诺，发送不影响正确性。
+- 它本身无任何保证或者承诺。
 
 ### "1b"消息: $<"1b", a, b, maxVBal[a], maxVal[a]>$
 
 - 记录了$maxBal[a]'=b$，**承诺a不会再响应任何 $Bal <= m.bal$的Phase1a，**承诺a不会Accept任何 $Bal <m.bal$的Phase2a；
-- 如果$maxVBal[a] \neq -1 $  ，表明 $VotedFor(a, maxVBal[a], maxVal[a])$  ，它**如实转达**了$SafeAt(maxVBal[a], maxVal[a])$；
-- 如果$maxVBal[a] = -1 $  ，表明a没有Accept过任何请求Phase1a，这可以认为是个特殊场景；
+- 如果$maxVBal[a] \neq -1 $ ，表明 $VotedFor(a, maxVBal[a], maxVal[a])$  ，它**如实转达**了$SafeAt(maxVBal[a], maxVal[a])$；
+- 如果$maxVBal[a] = -1 $，表明a没有Accept过任何请求Phase1a，这可以认为是个特殊场景；
 
 **因此，Phase1b实际上隐含了**：
 
 ​                 $CannotVoteBetween(a, maxVBal[a], b) \land SafeAt(maxVBal[a], maxVal[a])$  
 
-其中前一部分是a的承诺，后面的SafeAt是转达已有的Vote。
+其中前一部分是a的承诺，后一部分是转达已有的Vote蕴含的SafeAt。
 
 
 
@@ -582,31 +584,31 @@ $$
 
 - 保证了$SasfAt(b, v)$
 
-  Proposer判断$ShowsSafeAt(Q, b, v)$成立 ，才发送$<b,v>$，蕴含了$SafeAt(b, v)$。
+  Proposer判断$ShowsSafeAt(Q, b, v)$成立 ，才发送$<b,v>$，它蕴含了$SafeAt(b, v)$。
 
   
 
 
 ### "2b": $<"2b",a, b, v>$
 
-- 记录了$maxBal[a]'=b$，具体承诺内容参见"1b"的相应描述。如果这个acceptor正好也发送过对应的phase1b，那么已经承诺过。
+- 记录了$maxBal[a]'=b$，具体承诺内容参见"1b"的相应描述。如果这个acceptor正好也发送过对应的“1b”，那么实际上在执行Phase1b时已经承诺过。
 - 记录了$maxVBal[a]'=b, maxVal[a]'=v$，按照前面的讨论，这个式子隐含了$SafeAt(b, v)$。这个记录也表示a**承诺会如实转达**$SafeAt(b,v)$。
 
 
 
 ### **FAQ**: 承诺如何兑现？
 
-Phase1b和Phase2b都有自己的前提条件，比如 Acceptor a 在Phase1b修改了$maxBal[a]'=b$，只要它保存了这个数值不丢失，那么后续任意 $Bal \leq b$ Phase1a肯定会被拒绝，因为前提条件不成立。 
+Phase1b和Phase2b都有自己的前提条件，比如 Acceptor a 在Phase1b修改了$maxBal[a]'=b$，只要它保存了这个数值不丢失，那么后续任意 $Bal \leq b$ 的"1a"消息肯定会被拒绝，因为前提条件不成立。 
 
 
 
-## 4.4 Paxos如何保证Voting模型的Inv?
+## 4.4 Paxos 如何保证不变式 Inv 成立?
 
-Voting模型的Inv就是 $OneValuePerBallot \land VotesSafe$。Paxos在执行过程中，保证不变式Inv在每一步都成立。而下一步执行后的成立，依赖于其执行前所有步骤已经满足Inv。
+Voting模型的Inv就是 $OneValuePerBallot \land VotesSafe$。Paxos在执行过程中，保证不变式 Inv 在每一步都成立。而下一步执行后能够成立，依赖于其执行前的状态已经满足Inv。
 
 由于$VotesSafe$和$OneValuePerBallot$都是对已发生的所有投票的限定条件，而新的状态如果会产生新的投票，也会成为被约束的对象。因此，被Inv约束的对象是不断变化的，其本身是个滚动过程。
 
-#### 4.4.1 Paxos如何保证 OneValuePerBallot？
+#### 4.4.1 Paxos 如何保证 OneValuePerBallot？
 
 $$
 \begin{split} One&ValuePerBallot \triangleq \\
@@ -616,11 +618,11 @@ $$
 
 OneValuePerBallot由于只涉及同一个Bal的比较，相对独立，先用反证法证明它成立。
 
-**反证法**：所有$<b, v>$是Phase2a产生的，假设OneValuePerBallot不成立，即有一个Bal $b_x$，有两个Proposer $P1$和$P2$分别发送了"2a"消息$<b_x, v_1>$和$<b_x, v_2>$。那么$P_1$必然收到了某个Quorum $Q_1$里面所有成员的"1b"消息；而$P_2$收到了某个Quorum Q2里面所有成员的"1b"消息。但是这是不可能的，因为每个Acceptor a在发送"1b"时，已经保证$maxBal[a] > b_x$，所以不可能再次响应Bal同为$b_x$的"1a"。而根据Quorum的定义，$Q1$和$Q2$必然有交集，矛盾。
+**反证法**：所有$<b, v>$是Phase2a产生的，假设OneValuePerBallot不成立，即有一个Bal $b_x$，有两个Proposer $P1$和$P2$分别发送了"2a"消息$<b_x, v_1>$和$<b_x, v_2>$。那么P1必然收到了某个Quorum $Q_1$里面所有成员的"1b"消息；而P2收到了某个Quorum Q2里面所有成员的"1b"消息。但是这是不可能的，因为每个Acceptor a在发送"1b"时，已经保证$maxBal[a] > b_x$，所以不可能再次响应Bal同为$b_x$的"1a"。而根据Quorum的定义，$Q1$和$Q2$必然有交集，矛盾。
 
 所以，Paxos协议能保证OneValuePerBallot 恒成立。
 
-注意：上面的反证法没有依赖于$msgs$的全局可见性，而是按照实际系统中每个Proposer可见的消息来推导。在回顾Paxos时，我们曾经提到Paxos的Spec为了简化，与实际上系统有差异，没有体现出多个Proposer，依赖于$msgs$的全局可见性。
+注意：上面的反证法没有依赖于$msgs$的全局可见性，而是按照实际系统中每个Proposer执行Phase2a时可见的消息来推导。在回顾Paxos时，我们曾经提到Paxos的Spec为了简化，没有体现出多个Proposer，依赖于$msgs$的全局可见性。
 
 ### 4.4.2 Paxoss如何保证 Inv?
 
@@ -630,29 +632,31 @@ OneValuePerBallot由于只涉及同一个Bal的比较，相对独立，先用反
 $$
 \begin{split}VotesSafe \triangleq &\forall a \in Acceptor, b \in Ballot, v \in Value : \\              &VotedFor(a, b, v) => SafeAt(b, v)\end{split}
 $$
-**思路**：在 Phase2a 产生选票(”2a"消息)时，就要保证安全性，该选票无论是否被Accept都不影响选票的安全性。我们要推导的是：考察每一次 Phase2a 的执行，如果在执行前 Inv 成立，在执行后 Inv 也成立。其中一个关键点是：Phase2a确定Value的过程，就是判断$ShowsSafeAt(Q,b, v)$成立的过程。
+**思路**：在 Phase2a 产生选票(”2a"消息)时，就要保证安全性，该选票无论是否被Accept都不影响选票的安全性。我们要推导的是：每一次 Phase2a 的执行，如果在执行前 Inv 成立，在执行后 Inv 也成立。其中一个关键点是：Phase2a确定Value的过程，就是判断$ShowsSafeAt(Q,b, v)$成立的过程。
 
 - 由于执行过程中总有一个选票是第一个被产生的。不妨假设第1个执行Phase2a的选票是$<b_1,v_1>$，它的Phase2a被执行时，还没有任何选票，不可能有任何一个投票发生过，因此VotesSafe成立。根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_1, v_1)$蕴含了$SafeAt(b_1, v_1)$。因此本步骤执行后只有这一个可能的选票, 它是安全的，故Inv 依然成立。
 - 假设第2个执行Phase2a的产生的选票是$<b_2, v_2>$，也就是说它之前产生的选票仅有$<b_1, v_1>$(但是 $<b_1, v_1>$不一定被Accept过)，那么$Phase2a(b_2, v_2)$被执行时，只有$<b_1, v_1>$可能被Vote过，根据上一步描述，此时Inv(含VotesSafe)成立。$Phase2a(b_2, v_2)$ 被执行时，根据$ShowsSafety$定理，$ShowsSafeAt(Q, b_2, v_2)$蕴含了$SafeAt(b_2, v_2)$ 。因此本步骤执行后只有2个选票，它们都是安全的，故Inv 依然成立。
-- 强归纳法：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论这些选票分别被Vote了多少次。所以本步骤执行前Inv成立。根据$ShowsSafety$定理, $ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$蕴含了$SafeAt(b_n, v_n)$，因此本步骤执行后执行后只有n个选票，它们都是安全的，故Inv依然成立。
+- **强归纳**：假设第$n$个成功执行Phase2a的选票是$<b_n, v_n>$，在它之前产生的选票只有$<b_1, v_1>, <b_2, v_2>,... <b_{n-1}, v_{n-1}>$ ，由于这些选票的Phase2a已经分别保证了$SafeAt(b_1, v_1), SafeAt(b_2, v_2), ..., SafeAt(b_{n-1}, v_{n-1})$成立，无论这些选票分别被Vote了多少次。所以本步骤执行前Inv成立。根据$ShowsSafety$定理, $ShowSafeAt(Q, b_n, v_n)$ 产生的$<b_n, v_n>$蕴含了$SafeAt(b_n, v_n)$，因此本步骤执行后执行后一共有n个选票，它们都是安全的，故Inv依然成立。
 
 
 
 #### FAQ: 讨论Paxos如何满足Inv时，为什么不讨论Phase1a, Phase1b, Phase2b?
 
-- Phase1a：不涉及任何影响 VotesSafe 和 OneValuePerBallot 的因子变化，因此不会影响Inv。
+- Phase1a：不涉及任何影响 VotesSafe 和 OneValuePerBallot 的因素的变化，因此不会影响Inv。
 - Phase1b:  某个Acceptor执行Phase1b本身不产生选票也不涉及投票。其唯一可能的修改是增大$maxBal[a]$，而增大$maxBal[a]$不会使得Inv从true变为false (但是减小$maxBal[a]$会导致问题)。
 - Phase2b： Phase2a在产生选票$<b, v>$时，已经保证了选票的安全性$SafeAt(b,v)$，这个式子的成立不依赖于这个选票是否被Accept，或者被Accept了几次，所以$VoteFor(a, b, v)$​不会使得Inv从true变为false，而增大$maxBal[a]$也不影响Inv。
 
-#### FAQ：两个Phase1a完全并发执行，如何保证Inv？
+#### FAQ：两个Phase1a完全并行，如何保证Inv？
 
-- 假设并发的两个$Phase2a(b_x, v_x)$和$Phase2a(b_y, v_y)$，由于两个并发的Phase2a只能是在两个不同的Proposer上执行的，它们之间不可能有任何顺序依赖关系；由于它们分别读取本Proposer已经收到的"1b"消息，发送自己的"2a"消息，没有任何共享变量的并发读写，所以并发执行与按照某个顺序先后执行是相同的。而无论它们谁先执行，按照前面的推理，都可以保证VotesSafe。
+- 假设并行的两个$Phase2a(b_x, v_x)$和$Phase2a(b_y, v_y)$，由于两个并行的Phase2a只能是在两个不同的Proposer上执行(假设为P0和P1)，P0和P1各自按照自己收到的"1b"消息做决策，发送自己的"2a"消息，在执行过程中没有共享读写的变量，所以两个步骤之间没有任何因果(Causal Order)关系。它们无论谁先执行，还是并行执行，执行完成后可达的下一个状态实际上是相同的。实际上，任意两个没有因果关系的事件，都是可以调整发生顺序的。关于Causal Order和Partial Order，参见[4]。
+
+  
 
 #### FAQ：为什么增大$maxBal[a]$不影响Inv?
 
 - **简单来说**，**增加$maxBal[a]$在任何时候都不违背任何承诺**。
-- 因为增加$maxBal[a]$实际上增大了承诺的不投票范围，而不投票不会使得某个$SafeAt(b, v)$从true变为false。
-- OneValuePerBallot也不会受到影响，对于某个Acceptor a来说，如果它已经发送过某个"1b"消息，即$maxBal[a]=b$，那么增加$maxBal[a]$显然不会让它再响应同一个Bal b的"1a"，不违背承诺。
+- 因为增加 $maxBal[a]$ 实际上增大了承诺的不投票范围，而不投票不会使得某个 $SafeAt(b, v)$ 从true变为false。
+- OneValuePerBallot 也不会受到影响，对于某个Acceptor a来说，如果它已经发送过某个"1b"消息，即$maxBal[a]=b$，那么增加$maxBal[a]$显然不会让它再响应同一个Bal b的"1a"，不违背承诺。
 
 
 
@@ -700,6 +704,8 @@ $NoneOtherChoosableAt(b, v)$只阻止了它人，没有肯定自己。
 [2] Leslie Lamport的讲座视频：The Paxos algorithm or how to win a Turing Award. 
 
 [3] Paxos的TLA+ Spec: https://github.com/tlaplus/Examples/tree/master/specifications/Paxos
+
+[4] Leslie Lamport: Time, Clocks, and the Ordering of Events in a Distributed System
 
 
 
