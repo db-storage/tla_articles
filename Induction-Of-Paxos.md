@@ -6,13 +6,13 @@
 
 Paxos [1]是著名的共识协议，但也以难懂著称。即使是简化版的"Paxos Made Simple"一文[1]，把Paxos的两个阶段描述的比较具体，但是很多人仍然有疑惑。很多读者的感受是：觉得应该是对的，但是不知道为什么是对的。
 
-本人在理解Paxos的TLA+ Spec [3] (TLA+是一种形式化验证语言)的过程中，发现其中隐含了对于Paxos正确性的基于不变式(Invariance)的归纳推理。本文抽取一部分必要的部分，大部分改用公式表示，并辅以图形和文字，来理解为什么它是正确的(少部分内容仍然是 TLA+格式的)。希望能有所帮助。
+本人在理解Paxos的TLA+ Spec [3] (TLA+是一种形式化验证语言)的过程中，发现其中隐含了对于Paxos正确性的基于不变式(Invariance)的归纳推理，这些推理实际上通过一些列的定理(THEOREM)体现。本文抽取一部分必要的部分，大部分改用公式表示，并辅以图形和文字，来理解为什么它是正确的(少部分内容仍然是 TLA+格式的)。希望能有所帮助。
 
 这些内容是从Paxos的TLA+ Spec根据自己的理解抽取和组织的，并非新东西，如果有发现不准确的地方，欢迎指正。Lamport在2019年的一个系列讲座[2]中，也讲解过这个Spec。Lamport在讲座中提到，他当年大致就是按照“Consensus => Voting => Paxos” 一步步抽象来思考问题的，而不是一步到位，不过当年并没有按照TLA+去形式化成Spec。
 
 Paoxs已经这么难懂，为什么还要用偏形式化的方法去说推理？个人的观点是：Paxos本身是严格的，不形式化难以理解为什么是对的；形式化是更准确的，对于理解为什么是有帮助的。比如：**$SafeAt(b,v)$ 表示：”不可能用小于b的任何Ballot Number，选定value v以外的任何值“**。虽然文字描述在意义上也没用问题，但是太繁琐，而且在做推理或者证明时变得难以描述。
 
-理解本文的关键在于：理解投票安全性的含义，即上面的$SafaAt(b,v)$以及执行中如何始终保证它成立。即：如果每一次投票(即Phase2b)，都能保证$SafeAt(b,v)$，并且提能够保证$OneValuePerBallot$(每个Bal只有一个Value，从字面理解即可，相对比较简答)，那么就可以通过强归纳法得出，每次投票都是安全的，因此不可能形成两个不同的决议。注意，这个$SafeAt(b,v)$实际上是向更小的Ballot Number看的，**保证更小的Ballot Number不会形成不同的决议，**而不需要保证更大的Ballot Number怎么样。
+理解本文的关键在于：理解投票安全性公式$SafaAt(b,v)$以及$ShowsSafety$定理。$ShowsSafety$定理执行对于执行过程中如何保证安全性至关重要。即：如果每一次投票(即Phase2b)，都能保证$SafeAt(b,v)$和$OneValuePerBallot$ (每个Bal只有一个Value，从字面理解即可，相对比较简答)，那么就可以通过强归纳法得出，每次投票都是安全的，因此不可能形成两个不同的决议。注意，这个$SafeAt(b,v)$实际上是向更小的Ballot Number看的，**保证更小的Ballot Number不会形成不同的决议，**而不需要保证更大的Ballot Number怎么样。
 
 
 
@@ -190,15 +190,15 @@ $$
 
 ## 2.3 如何产生满足Inv的Value？
 
-$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是没说明按照什么规则去产生选票<b, v>。如果不知道如何产生安全的选票$<b, v>$，就没法高效地运转。 
+$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是没说明如何去产生选票<b, v>。如果不知道如何产生安全的选票$<b, v>$，就没法高效地运转。 
 
 先不考虑具体协议。假设Proposer有上帝视角，可以看到所有 Acceptor的状态，怎么产生选票$<b, v>$ ?  实际上基于下面的定理：
 
 ### ShowsSafety 定理
 
-含义：在之前所有状态都保证了 $VotesSafe$ 和 $OneValuePerBallot$的前提下，满足 $ShowsSafeAt(Q, b, v)$ 的 $<b, v>$，就是安全的，它蕴含了$SafeAt(b, v)$。
+**含义**：在之前所有状态都保证了 $VotesSafe$ 和 $OneValuePerBallot$的前提下，满足 $ShowsSafeAt(Q, b, v)$ 的 $<b, v>$，就是安全的，它蕴含了$SafeAt(b, v)$。
 $$
-\begin{split}定理 Shows&Safety  \triangleq \\ &\land VotesSafe \\&\land OneValuePerBallot \\&  \quad =>   \forall Q \in Quorum, b \in Ballot, v \in Value :\\& \qquad \qquad \qquad    ShowsSafeAt(Q, b, v) => SafeAt(b, v)            \end{split}
+\begin{split}定理 \quad Shows&Safety  \triangleq \\ & VotesSafe \land OneValuePerBallot \\&  \quad =>   \forall Q \in Quorum, b \in Ballot, v \in Value :\\& \qquad \qquad \qquad    ShowsSafeAt(Q, b, v) => SafeAt(b, v)            \end{split}
 $$
 
 ### ShowsSafeAt(Q, b, v)
@@ -262,18 +262,18 @@ $$
 
 
 
-### 从ShowsSafeAt 推导 SafeAt
+### 从ShowsSafeAt 推导 SafeAt的具体过程
 
-**在之前的运行已经保证 $VotesSafe$ 和 $OneValuePerBallot$的前提下，我们从SafeAt的本意去理解和推导**。继续按照上面的例子来思考，$ShowsSafeAt(Q, b, v)$ 能否保证 $SafeAt(b, v)$?  回顾下$SafeAt$的定义：
+**在之前的状态已经保证 $VotesSafe$ 和 $OneValuePerBallot$的前提下**。继续按照上面的例子来思考，$ShowsSafeAt(Q, b, v)$ 能否保证 $SafeAt(b, v)$?  回顾下$SafeAt$的定义：
 $$
 \begin{split}SafeAt(b, v) &\triangleq \\ &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)\end{split}
 $$
 
-要证明它成立 ，我们把 $[0, b-1]$分为三个区间：$[0, b_1-1], [b_1, b_1], [b_1+1, b-1]$， 然后分别得出三个区间的NoneOtherChoosableAt成立。
+要证明它成立 ，我们把 $[0, b-1]$分为三个区间：$[0, b_1-1], [b_1, b_1], [b_1+1, b-1]$， 然后分别得出三个区间的$NoneOtherChoosableAt$成立。因为这三个区间实际上是不同的。
 
 #### (A). 区间$[0, b_1-1]$
 
-由于已知$VoteFor(a_1, b_1, v_1)$为true，根据$VotesSafe$，它隐含了$SafeAt(b_1, v_1)$为true。根据$SafeAt$的定义，成立。
+由于已知$VoteFor(a_1, b_1, v_1)$为true，根据$VotesSafe$，它隐含了$SafeAt(b_1, v_1)$为true。根据$SafeAt$的定义，这个区间的$NoneOtherChoosableAt$成立。
 $$
 \begin{split}
 VotesSafe \land VoteFor(a_1, b_1, v_1) => SafeAt(b_1,v_1)
@@ -299,7 +299,7 @@ $$
    & \forall a \in Q: CannotVoteBetween(a, b_1, b)
    \end{split}
 $$
-而$b_1$是最大的，那么在区间$[b_1+1, b-1]$，即上图中灰色区间的最短部分(公共部分)，就不可能选定任何值，因为任意两个Quorum都相交的。
+而$b_1$是最大的，那么在区间$[b_1+1, b-1]$，即上图中灰色区间的最短部分(公共部分)，就不可能选定任何值，因为任意两个Quorum都相交的。既然不可能选定任何值，$NoneOtherChoosableAt$ 在该区间成立。
 
 
 
@@ -309,7 +309,7 @@ $$
 
 
 
-#### FAQ:  ShowsSafety的含义？
+#### FAQ:  ShowsSafety定理的含义？
 
 这个定理表明，如果之前所有操作都满足了Inv，只要Acceptor a判断$ShowsSafeAt(Q, b, v)$成立，就可以推导出$SafeAt(b, v)$。
 
@@ -324,12 +324,12 @@ $$
 不过下面这些形式化描述，与Paper里面描述的还是有所区别的，主要包括以下方面：
 
 - 没有具体的Proposer角色，Phase1a和Phase2a都没有体现出哪个Proposer在执行；
-- 由于没有体现Proposer角色，与实际系统产生了差异，尤其是消息的可见性。比如Phase2a会判断是$msgs$里面是否有相同Bal的"2a"消息，这个在实际的多Proposer系统中是没法保证可见的，更不用说原子性。
-- 我们在后面推导OneValuePerBallot时，并没有依赖于这种全局的消息可见性，而是假设Proposer存在，仅要求每个Proposer能看到发给自己的消息。
+- 由于没有Proposer角色，与实际系统产生了差异，尤其是消息的可见性。比如Phase2a会判断是$msgs$里面是否有相同Bal的"2a"消息，这个在实际的多Proposer系统中是没法保证可见的，更不用说原子性。
+- 我们在后面推导Paxos如何保证OneValuePerBallot时，并没有依赖于这种全局的消息可见性，而是假设Proposer存在，仅要求每个Proposer能看到发给自己的消息。
 
 ## 3.1 常量和变量定义部分
 
-我们先抽取一些必要的变量和常量定义。其中Set和Map与编程语言中的概念相同，这些对于有计算机或者数学基础的读者不难。其中常量是需要预先给定值的。
+我们先抽取一些必要的变量和常量定义。其中Set和Map与编程语言中的概念相同。其中常量是需要预先配置值的。
 
 | 名称     | 类型 | 含义                                                         |
 | -------- | ---- | ------------------------------------------------------------ |
@@ -480,7 +480,7 @@ $$
 
 #### 与$ShowsSafeAt(Q,b, v)$的对应：
 
-- $Q1bv$为空集合时，对应$ShowsSafeAt(Q,b, v)$ 中 $c=-1$ 的分支。上面的式子中没有对$v$做任何限制，但是实际上在整个状态机的Next函数中，已经在外围做了限制，即 $v\in Value$。
+- $Q1bv$ 为空集合时，对应$ShowsSafeAt(Q,b, v)$ 中 $c=-1$ 的分支。上面的式子中没有对$v$做任何限制，但是实际上在整个状态机的Next函数中，已经在外围做了限制，即 $v\in Value$。
 
 $$
 \begin{split}
@@ -490,11 +490,11 @@ Next \triangleq &\lor \exists b \in Ballot : \lor Phase1a(b)\\
         \end{split}
 $$
 
-- $Q1bv$非空时，对应了$ShowsSafeAt(Q,b, v)$ 中 $c \neq -1$ 的分支，取$mbal$最大值及对应的$mbal$。
+- $Q1bv$ 非空时，对应了$ShowsSafeAt(Q,b, v)$ 中 $c \neq -1$ 的分支，取$mbal$最大值及对应的$mval$。
 
 **FAQ**：上面式子中，为什么需要通过前提条件的1)，来避免两次执行phase2a?
 
-- 因为Value可能是Proposer自己决定的($Q1bv$为空时)，而Paxos的Spec 里面的msg全部保留不删除。如果Proposer用同一个Bal执行两次Phase2a，$ShowsSafeAt(Q, b, v)$可能两次都成立，这样两次会生成不同的Value，导致OneValuePerBallot被违背。
+- 因为Value可能是Proposer自己决定的($Q1bv$ 为空)，而Paxos的Spec 里面的msg全部保留不删除。如果Proposer用同一个Bal执行两次Phase2a，$ShowsSafeAt(Q, b, v)$可能两次都成立，这样两次会生成不同的Value，导致OneValuePerBallot被违背。
 
 **FAQ**:  实际上的paxos实现，一个Poposer如何判断前提条件1)是否成立?
 
@@ -512,7 +512,7 @@ Acceptor a执行Phase2b的过程，分为以下几个部分。
 
 ​    存在一个"2a"消息m，且满足 $m.bal \geq maxBal[a]$。 
 
-​    注意：这里的判断符号是$\geq$，与Phase1b是不同的。
+​    **注意**：这里的判断符号是$\geq$，与Phase1b是不同的。
 
 ### 修改本Acceptor的变量
 
