@@ -1,4 +1,4 @@
-#  觉得Paxos是对的但不知道为什么？探讨下Paxos背后的数学
+#  觉得Paxos是对的却不知为啥？探讨下Paxos背后的数学
 
 ---
 
@@ -50,14 +50,19 @@ Ch1 从 Consensus.tla 抽取Consensus的定义，即最终要保证的目标；C
 
 
 $$
-\begin{split}VotedFor(a, b, v) \triangleq \space &<<b, v>> \in votes[a]\\ChosenAt(b, v) \triangleq \space  &\exists Q \in Quorum :   \\                   &  \forall a \in Q : VotedFor(a, b, v) \\chosen \triangleq &\{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\  DidNotVoteAt(a, b) \triangleq &\forall v \in Value : \lnot VotedFor(a, b, v) \\CannotVoteAt(a, b) \triangleq &\land maxBal[a] > b\\            &\land DidNotVoteAt(a, b)\\
-chosen \triangleq & \{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\
+\begin{split}VotedFor(a, b, v) &\triangleq \space <<b, v>> \in votes[a]\\
+ChosenAt(b, v) &\triangleq \space  \exists Q \in Quorum :   \\
+&  \qquad \qquad  \forall a \in Q : VotedFor(a, b, v) \\
+chosen &\triangleq \{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\  DidNotVoteAt(a, b) &\triangleq \forall v \in Value : \lnot VotedFor(a, b, v) \\
+CannotVoteAt(a, b) &\triangleq \land maxBal[a] > b\\            
+& \quad \space \land DidNotVoteAt(a, b)\\
+chosen &\triangleq  \{v \in Value : \exists b \in Ballot : ChosenAt(b, v)\}\\
 \end{split}
 $$
 
 ### VotedFor(a,b,v)
 
-- $VotedFor(a, b, v)$:  如果Acceptor a曾经Vote了选票($b$, $v$)，本函数为true。注意Voted/Accepted两个词会交换使用。
+- $VotedFor(a, b, v)$:  如果Acceptor a曾经Accept了选票$<b,v>$，本函数为true。注意Voted/Accepted两个词会交换使用。
 
 ### ChosenAt(b, v)
 
@@ -83,7 +88,7 @@ $$
 
 $$
 \begin{split}
-None&OtherChoosableAt(b, v) \triangleq \\
+NoneOther&ChoosableAt(b, v) \triangleq \\
 &\exists Q \in Quorum : \\
      & \qquad \forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
      \end{split}
@@ -105,7 +110,7 @@ $$
 
 $$
 \begin{split}
-  Safe&At(b, v) \triangleq \\ 
+  SafeAt(b, v) &\triangleq \\ 
   &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)
   \end{split}
 $$
@@ -118,7 +123,7 @@ $$
 
 - VotesSafe: 要求每个 Acceptor在确认投票安全的情况下才能投票（即大家都遵守安全规则去投票，不能随便投，说没有撒谎的)；
   $$
-  \begin{split}Votes&Safe \triangleq \\
+  \begin{split}VotesSafe &\triangleq \\
   &\forall a \in Acceptor, b \in Ballot, v \in Value : \\             
   & \qquad VotedFor(a, b, v) => SafeAt(b, v)\end{split}
   $$
@@ -126,7 +131,7 @@ $$
 - OneValuePerBallot: 同一个Ballot的任意两个投票(不同的Acceptor)，对应的 Value必定相同
 
 $$
-\begin{split} One&ValuePerBallot \triangleq\\
+\begin{split} OneValue&PerBallot \triangleq\\
 &\forall a1, a2 \in Acceptor, b \in Ballot, v1, v2 \in Value : \\     
 & \qquad VotedFor(a1, b, v1) \land VotedFor(a2, b, v2) => (v1 = v2) \end{split}
 $$
@@ -143,7 +148,7 @@ $$
 
 只要保证$VotesSafe$ 和 $OneVote$，就能保证 Consensus。可以用下面的式子表示：
 $$
-\begin {split}Votes& SafeImpliesConsistency  \triangleq \\          & \land VotesSafe \\          & \land OneVote \\          & => \qquad \lor chosen = \{\} \\             & \qquad \qquad \lor \exists v \in Value : chosen = \{v\}\end{split}
+\begin {split}VotesSafe&ImpliesConsistency  \triangleq \\          & \land VotesSafe \\          & \land OneVote \\          & => \qquad \lor chosen = \{\} \\             & \qquad \qquad \lor \exists v \in Value : chosen = \{v\}\end{split}
 $$
 OneVote:  同一个Ballot的Value必定是相同的，实际上OneValuePerBallot 已经蕴含了 OneVote。
 $$
@@ -185,9 +190,9 @@ $$
 
 ## 2.3 如何产生满足Inv的Value？
 
-$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是没说明按照什么规则去产生选票<b, v>。如果不知道如何产生有效$<b, v>$，就没法高效地运转。 
+$VotesSafe$和$OneVote$都是限定条件，它规定什么是不能违反的，但是没说明按照什么规则去产生选票<b, v>。如果不知道如何产生安全的选票$<b, v>$，就没法高效地运转。 
 
-先不考虑具体协议。假设Proposer有上帝视角，可以看到所有 Acceptor的状态，怎么产生一个满足不变式 Inv 的选票$<b, v>$ ?  实际上基于下面的定理：
+先不考虑具体协议。假设Proposer有上帝视角，可以看到所有 Acceptor的状态，怎么产生选票$<b, v>$ ?  实际上基于下面的定理：
 
 ### ShowsSafety 定理
 
@@ -645,7 +650,7 @@ $$
 
 #### FAQ：为什么增大$maxBal[a]$不影响Inv?
 
-- **简单来说**，**增加$maxBal[a]$在任何时候都不违背任何承诺**。
+- **简单来说**，**增大$maxBal[a]$在任何时候都不违背任何承诺**。
 - 因为增加 $maxBal[a]$ 实际上增大了承诺的不投票范围，而不投票不会使得某个 $SafeAt(b, v)$ 从true变为false。
 - OneValuePerBallot 也不会受到影响，对于某个Acceptor a来说，如果它已经发送过某个"1b"消息，即$maxBal[a]=b$，那么增加$maxBal[a]$显然不会让它再响应同一个Bal b的"1a"，不违背承诺。
 
@@ -653,15 +658,15 @@ $$
 
 # 5 一些FAQ
 
-## 5.1 有一个未形成共识的"2a"消息$<b_1, v_1>$，如果将来形成共识，value会是$v_1$么？
+## 5.1 有一个选票$<b_1, v_1>$还未被选定，如果将来形成共识，value会是$v_1$么？
 
 不一定，假设只有$a_1$ Accept了这个"2a"，然后宕机了，而其他节点都没有收到这个"2a"消息。如果其他节点再形成共识，就仿佛这个"2a"没发生过。
 
-$SafeAt(b_1, v_1)$只阻止了$<b$部分的Bal形成其他决议，但没有肯定自己。只有$ChosenAt(b_1, v_2)$是真正成就了自己，不可能在选定其他的Value。
+按照之前我们讨论的定义，"2a"消息蕴含了$SafeAt(b_1, v_1)$，即只阻止了$<b_1$部分的Bal选定其他值，不能保证用$>b_1$的Bal选定的值还是$v_1$。只有$ChosenAt(b_1, v_1)$真正成就了自己。
 
 
 
-## 5.2 如果有多个未形成共识的"2b"?
+## 5.2 多个Acceptor分别选定了不同的选票，会如何？
 
 假设一共有5个Acceptor $\{a1, a2, a3, a4, a5\}$，$VotedFor(a_1,b_1,v_1)$, $ VotedFor(a_2,b_2, v_2)$ 和 $VotedFor(a_3,b_3, v_3)$都成立，且$b_1 \neq b_2 \neq b_3$,  $v_1\neq v_2  \neq v_3$，而$a_4, a_5$都没有Vote过，如果将来形成共识，value会是哪个？
 
