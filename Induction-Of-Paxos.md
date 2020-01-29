@@ -380,9 +380,9 @@ $$
 
 感兴趣的读者可以自己计算下，要满足上面Assumption的式子，Q1, Q2的成员个数**不一定**都需要达到Acceptor的半数以上，它们的成员个数也不一定是相等的。虽然在实际应用中往往都简化为多数派。
 
-在TLA+ Spec中，每一个步骤都被认为是原子的，而整个分布式系统的运行，被认为是一系列步骤/状态变更组成的序列。具体到paxos的Spec，Phase1a, Phase1b, Phase2a, Phase2b这些步骤都被认为是原子的。状态变更不一定对应单个指令，对于分布式系统，一个状态变更可以由多个指令组成，只要能够保证这些指令不受其它指令的影响并且可以保证原子性即可。
+在TLA+ Spec中，每一个步骤都被认为是**原子的**，而整个分布式系统的运行，被认为是一系列步骤/状态变更组成的序列。具体到paxos的Spec，Phase1a, Phase1b, Phase2a, Phase2b这些步骤都被认为是原子的。
 
-//TODO: 怎么确定原子性？
+
 
 ## 3.2 Phase1a
 
@@ -602,13 +602,13 @@ Phase1b和Phase2b都有自己的前提条件，比如 Acceptor a 在Phase1b修�
 
 
 
-## 4.4 Paxos 如何保证不变式 Inv 成立?
+## 4.2 Paxos 如何保证不变式 Inv 成立?
 
 Voting模型的Inv就是 $OneValuePerBallot \land VotesSafe$。Paxos在执行过程中，保证不变式 Inv 在每一步都成立。而下一步执行后能够成立，依赖于其执行前的状态已经满足Inv。
 
 由于$VotesSafe$和$OneValuePerBallot$都是对已发生的所有投票的限定条件，而新的状态如果会产生新的投票，也会成为被约束的对象。因此，被Inv约束的对象是不断变化的，其本身是个滚动过程。
 
-#### 4.4.1 Paxos 如何保证 OneValuePerBallot？
+#### 4.2.1 Paxos 如何保证 OneValuePerBallot？
 
 $$
 \begin{split} One&ValuePerBallot \triangleq \\
@@ -624,7 +624,7 @@ OneValuePerBallot由于只涉及同一个Bal的比较，相对独立，先用反
 
 注意：上面的反证法没有依赖于$msgs$的全局可见性，而是按照实际系统中每个Proposer执行Phase2a时可见的消息来推导。在回顾Paxos时，我们曾经提到Paxos的Spec为了简化，没有体现出多个Proposer，依赖于$msgs$的全局可见性。
 
-### 4.4.2 Paxoss如何保证 Inv?
+### 4.2.2 Paxoss如何保证 Inv?
 
 根据上一段证明，OneValuePerBallot 恒成立。而$Inv = OneValuePerBallot \land VotesSafe$， 我们只要讨论 VotesSafe 是否始终成立即可。
 
@@ -660,21 +660,13 @@ $$
 
 
 
-## 4.5 一张图回顾下整体过程
-
-下面一张图较完整地说明了两阶段的过程，主要强调各个消息的含义。为了方便，只画出了两个acceptor $a_1, a_2$。注意橙色底色的是消息隐含的承诺或者转达。为了简化，图中没有体现一些变量的变化(例如$maxBal$)。这里假设 $\{a1, a2\}$是一个Quorum，且$b1>b2$，P0在收到两个 "1b"消息后，就可以推导出$SafeAt(b, v_1)$。
-
-  ![allinone](Figures/AllInOne.png)
-
-
-
 # 5 一些FAQ
 
 ## 5.1 有一个未形成共识的"2a"消息$<b_1, v_1>$，如果将来形成共识，value会是$v_1$么？
 
-不一定，假设只有$a_1$ Accept了这个"2a"，然后$a_1$ 宕机了，其他节点形成了共识，就仿佛这个"2a"没发生过。
+不一定，假设只有$a_1$ Accept了这个"2a"，然后宕机了，而其他节点都没有收到这个"2a"消息。如果其他节点再形成共识，就仿佛这个"2a"没发生过。
 
-$NoneOtherChoosableAt(b, v)$只阻止了它人，没有肯定自己。
+$SafeAt(b_1, v_1)$只阻止了$<b$部分的Bal形成其他决议，但没有肯定自己。只有$ChosenAt(b_1, v_2)$是真正成就了自己，不可能在选定其他的Value。
 
 
 
@@ -686,20 +678,37 @@ $NoneOtherChoosableAt(b, v)$只阻止了它人，没有肯定自己。
 
 2）如果$a_1, a_2，a_3$都参加了$b_x$的Phase1，那么就根据$b_1, b_2, b_3$的最大值来决定，选取相应的Value。参见$ShowsSafeAt(Q, b, v)$。
 
-**思考**：会不会出现4个Acceptor，分别Vote了**不同**的Value(可以是不同的Ballot)? 为什么？
+**思考**：5个Acceptor中，会不会出现4个Acceptor，分别Vote了**不同**的Value(不同的Bal)? 为什么？
 
 
 
 ## 5.3 Instance是什么？
 
-- 假设某西方国家议会每天只形成一个决议（或者说通过一个提案），但是每个州代表都有自己的提案，大家都抢着提，希望本州的提案早日被通过。那么，每一天形成一个决议的过程，就是一个Instance的执行过程，一年有365个Instance。Instance之间的相对顺序是有意义的，1号决议不能在 2号决议后执行，甚至2号决议可能还声称从某天开始废除1号决议。
+- 假设某西方国家议会每天只形成一个决议（或者说通过一个提案），但是每个州代表都有自己的提案，大家都抢着提，希望本州的提案早日被通过。那么，每一天形成一个决议的过程，就是一个Instance的执行过程，相当于一年有365个Instance。Instance之间的相对顺序是有意义的，1号决议不能在 2号决议后执行，甚至2号决议可能还声称从某天开始废除1号决议。
 
 - Ballot Number跟Instance之间的关系：每个州代表都在做提案，但是一天只能通过一个提案，今天到底通过哪一个？可以想象成各个州在竞标，把Ballot Number想象成不断增加的竞标出价，只要没形成决议，可以不断提高竞价来抢。
 
 
 
 
-[1] Leslie Lamport的Paper: Paxos Made Simple
+## 5.4 每个步骤的原子性是必须的么？是否可以拆分？
+
+$$
+\begin{align}
+Phase&1b(a) \triangleq \\
+& \land \exists m \in msgs : \\
+& \qquad \land m.type = "1a"  \land \space m.bal > maxBal[a]\\  
+& \qquad \land maxBal' = [maxBal\space EXCEPT \space ![a] = m.bal]\\                  & \qquad \land Send([type |-> "1b", acc |-> a, bal |-> m.bal, \\
+& \qquad \qquad mbal |-> maxVBal[a], mval |-> maxVal[a]])\\              
+\end{align}
+$$
+
+- 以Phase1b为例，上面的(3)是前提条件判断，(4)是修改$maxBal[a]$，这两个显然是紧密关联，必须原子；
+- (5)和(6)是同一件事，我们用(5)表示。(5)需要读取多个值($m.bal, maxBVal[a]和maxVal[a]$)，这些值的读取需要是原子的，即对应某个时刻的值，否则就不是如实转达已发生的投票；所以，即使实际的网络发送与(3)/(4)不是原子的，消息的生成也必须是与(3)(4)是原子的。
+
+
+
+[1] Leslie Lamport: Paxos Made Simple
 
 [2] Leslie Lamport的讲座视频：The Paxos algorithm or how to win a Turing Award. 
 
