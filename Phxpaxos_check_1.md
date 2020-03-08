@@ -1,6 +1,6 @@
 # ">"还是">="？ 对比下标准Paxos和Phxpaxos实现
 
-# 1. 简介
+# 1. 前言
 
 我在春节期间写过一篇关于Paxos正确性背后的数学的文章（[链接](https://zhuanlan.zhihu.com/p/104463008)）。那么这类形式化的东西对于工程实践的作用到底有多少？这篇文章从Paxos的 Phase1b公式出发，去理解下微信团队的phxpaxos的实现 （[链接](https://github.com/tencent/phxpaxos)），分析该实现中与标准Paxos(以及TLA+ spec)的差异，以及这种差异在什么场景下会存在什么问题。
 
@@ -20,7 +20,7 @@
 
 ## 2.1 原文里Phase1a描述
 
-我们看下Lamport的原文描述，可以看到响应一个Ballot 的前提是： 收到的“1a”消息的Ballot，大于之前已经响应过的Request 的 Ballot 。
+我们看下Lamport的原文描述，可以看到Acceptor响应一个Ballot 的前提是： 收到的“1a”消息的Ballot，大于之前已经响应过的Request 的 Ballot 。
 
 > Phase 1. (a) A proposer selects a proposal number n and sends a prepare request with number n to a majority of acceptors.
 >
@@ -63,9 +63,9 @@ int Acceptor :: OnPrepare(const PaxosMsg & oPaxosMsg)
 
 
 
-## 2.4 差异
+## 2.4 差异及问题
 
-可以看出，Phxpaxos的Phase1b 实现，与标准paxos协议是有差异的。$">"$ 变成了$">="$。在之前的文章中我们提过，这个$">"$对于保证OneValuePerBallot是必须的，没有它就没有了正确性保证。
+可以看出，Phxpaxos的Phase1b 实现，与标准paxos协议是有差异的。$">"$ 变成了$">="$。在之前的文章中（[链接](https://zhuanlan.zhihu.com/p/104463008)）我们提过，这个$">"$对于保证OneValuePerBallot是必须的，没有它就没有了正确性保证。
 
 那么Phxpaxos 这么实现，是不是有问题呢？这里面分两个方面分析相同Ballot Number的出现条件：
 
@@ -108,7 +108,7 @@ class BallotNumber
 正常运行的proposer，代码很容易做到不重用相同的ProposalID(比如每次都自增)。但是考虑如下情形(一个可能的event序列)：
 
 1. Proposer P1发送Ballot为b1的Phase1a消息；
-2. P1收到了Quorum个Acceptor回复的在"1b"消息，但是不包括自己(假设P1自己的磁盘太忙，phase1b的持久化过程迟迟没有完成)。
+2. P1收到了Quorum个Acceptor回复的"1b"消息，但是不包括自己(假设P1自己的磁盘太忙，phase1b的持久化过程迟迟没有完成)。
 3. P1发送 2a消息$<b1, v1>$给各个Acceptor，然后自己宕机。
 4. P1重启，自己没有关于b1的任何记录。
 5. P1再次用Ballot Number b1执行Phase1，又成功（因为符合$>=$条件）。
@@ -211,7 +211,7 @@ int Acceptor :: OnPrepare(const PaxosMsg & oPaxosMsg)
 
 
 
-# 3. 修改代码验证用错的">="会带来的问题
+# 3. 修改代码验证用错的">="可能会带来的问题
 
 之前我们已经看到，phxpaxos虽然与标准paxos不一致，但是做到了下面两点，所以并没有出现正确性问题。
 
@@ -228,6 +228,7 @@ int Acceptor :: OnPrepare(const PaxosMsg & oPaxosMsg)
 ## 3.1 代码修改
 
 - 修改Proposer的代码(Base :: BroadcastMessage函数)，不给本地节点发送“1a”消息 (模拟本地节点某次执行"1b"超慢的场景)；
+- Proposer在执行Phase2a时解析下提议的value，如果包含一个特殊字符串 ”badguy"，则在发送Phase2a后，**主动exit**(退出进程，模拟在这个环节自己宕机了)。
 
 ```diff
 --- a/src/algorithm/base.cpp
@@ -246,38 +247,12 @@ int Acceptor :: OnPrepare(const PaxosMsg & oPaxosMsg)
          }
      }
 +    */
-```
-
-
-
-- 修改Proposer的代码，在收到Quorum个"1b"的Response后，不是立即执行phase2a，而是**打印一个提示消息，并sleep一会**(我 的实现是20s，让自己在看到消息后可以执行几个kill 进程的操作，这一步可以进一步自动化)。
-
-```c++
--- a/src/algorithm/proposer.cpp
-+++ b/src/algorithm/proposer.cpp
-@@ -359,6 +358,8 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
-         BP->GetProposerBP()->PreparePass(iUseTimeMs);
-         PLGImp("[Pass] start accept, usetime %dms", iUseTimeMs);
-         m_bCanSkipPrepare = true;
-+        fprintf(stdout, "I will sleep 20 seconds before Accept, you can kill 1-3\n");
-+        sleep(20);
-         Accept();
+     string sBuffer;
+     int ret = PackMsg(oPaxosMsg, sBuffer);
+@@ -256,6 +258,20 @@ int Base :: BroadcastMessage(const PaxosMsg & oPaxosMsg, const int iRunType, con
      }
-```
 
-
-
-- Proposer在执行Phase2a时(Base :: BroadcastMessage)，解析下提议的value，如果包含一个特殊字符串 ”badguy"，则在发送Phase2a后，**主动exit**(退出进程，模拟在这个环节自己宕机了)；
-
-由于 
-
-```diff
-@@ -286,8 +300,8 @@ int Acceptor :: OnPrepare(const PaxosMsg & oPaxosMsg)
-
- void Acceptor :: OnAccept(const PaxosMsg & oPaxosMsg)
- {
-    //省略
-    ret = m_poMsgTransport->BroadcastMessage(m_poConfig->GetMyGroupIdx(), sBuffer, iSendType);
+     ret = m_poMsgTransport->BroadcastMessage(m_poConfig->GetMyGroupIdx(), sBuffer, iSendType);
 +    if (MsgType_PaxosAccept == oPaxosMsg.msgtype()){
 +        if (std::string::npos != oPaxosMsg.value().find("badguy")) {
 +            sleep(1);
@@ -292,12 +267,28 @@ int Acceptor :: OnPrepare(const PaxosMsg & oPaxosMsg)
 +        } else {}
 +    } else {}
 
-+    //BroadcastMessage并没有发给自己，下面代码是在本地执行Accept，如果上一步exit，则本地没有执行
-    if (iRunType == BroadcastMessage_Type_RunSelf_Final)
-    {
-        m_poInstance->OnReceivePaxosMsg(oPaxosMsg);
-    }
+     if (iRunType == BroadcastMessage_Type_RunSelf_Final)
+     {
 ```
+
+
+
+- 修改Proposer的代码，在收到Quorum个"1b"的Response后，不是立即执行phase2a，而是**打印一个提示消息，并sleep一会**(我 的实现是20s，让自己在看到消息后可以执行几个kill 进程的操作，这一步可以进一步自动化)。
+
+```diff
+-- a/src/algorithm/proposer.cpp
++++ b/src/algorithm/proposer.cpp
+@@ -359,6 +358,8 @@ void Proposer :: OnPrepareReply(const PaxosMsg & oPaxosMsg)
+         BP->GetProposerBP()->PreparePass(iUseTimeMs);
+         PLGImp("[Pass] start accept, usetime %dms", iUseTimeMs);
+         m_bCanSkipPrepare = true;
++        fprintf(stdout, "I will sleep 20 seconds before Accept, you can kill 1-3\n");
++        sleep(20);
+         Accept();
+     }
+```
+
+
 
 
 
@@ -328,7 +319,7 @@ Phxpaxos自带了一个phxecho程序，它基于basic paxos执行。每个Server
 
 1. 启动5个phxecho Server: S0 - S4。启动后可以做些常规的Propose测试，然后开始下面的手工测试过程：
 2. 在S4上键入提议的value, 即一个字符串，我们键入： "badguy";
-3. 在S4收到Quorum个reply，并打印提示消息后，尽快手工kill掉S1, S3, S3 (需要在S4的的sleep完成前)；
+3. 在S4收到多数派的reponse，并打印提示消息后，尽快手工kill掉S1, S3, S3 (需要在S4的的sleep完成前)；
 4. S4会在sleep结束后，发送Accept("2a")请求，然后主动exit(退出进程)。实际上只有S0 真正Accept了这个Value (检验S0的log即可)； **注意**，Proposer发送"2a"给自己是在发送给其他Server之后，已经exit process了，自己没有执行Accept。
 5. Kill 掉S0 (S0已经Accept了 ”badguy")；
 6. Restart S1, S2, S3 (这几个Server没有Accept过 "badguy")，**不启动S0**；
@@ -373,4 +364,46 @@ W0229 12:45:53.102106 65361 logger_google.cpp:103] [44;37m Imp(0): PN8phxpaxos8
 本文至此结束，希望大家在理解Paxos时，不仅仅是记住了步骤，而是知道背后的原因。如果你想加深对原理的理解，可以思考了下我在文章开始挖的坑：**为什么Phase2b里面判断条件是"$>=$"号？**。
 
 
+
+# 用TLA+spec 验证这个问题
+
+## 修改Phase1b
+
+```
+
+Phase1b(a) == /\ \E m \in msgs : 
+                  /\ m.type = "1a"
+                  //这一行做了修改： > 变为 >=
+                  /\ m.bal >= maxBal[a]
+                  /\ maxBal' = [maxBal EXCEPT ![a] = m.bal]
+                  /\ Send([type |-> "1b", acc |-> a, bal |-> m.bal,
+                            mbal |-> maxVBal[a], mval |-> maxVal[a]])
+              /\ UNCHANGED <<maxVBal, maxVal>>
+```
+
+
+
+## 修改Phase2a
+
+默认不允许发送 Ballot相同的Phase2a(防止Queue已知增加消息，认为是不同的状态)，我修改下。
+
+否则，model checker检查不出问题来。
+
+```
+Phase2a(b, v) ==
+  //这一行做了修改，增加了 /\ m.val = v
+  /\ ~ \E m \in msgs : m.type = "2a" /\ m.bal = b /\ m.val = v
+  /\ \E Q \in Quorum :
+        LET Q1b == {m \in msgs : /\ m.type = "1b"
+                                 /\ m.acc \in Q
+                                 /\ m.bal = b}
+            Q1bv == {m \in Q1b : m.mbal \geq 0}
+        IN  /\ \A a \in Q : \E m \in Q1b : m.acc = a
+            /\ \/ Q1bv = {}
+               \/ \E m \in Q1bv :
+                    /\ m.mval = v
+                    /\ \A mm \in Q1bv : m.mbal \geq mm.mbal
+  /\ Send([type |-> "2a", bal |-> b, val |-> v])
+  /\ UNCHANGED <<maxBal, maxVBal, maxVal>>
+```
 
