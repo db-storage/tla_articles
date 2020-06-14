@@ -1,40 +1,51 @@
-# 为什么说状态机是Lamport分布式理论的核心？ 
+# 用一个状态机描述整个分布式系统？谈谈Lamport被误读的"Time, Clock"一文以及状态机
 
+# 1. 概要
 
+在阅读Lamport的Paper、学习TLA+形式化验证过程中，发现状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机和 Model Checker运行过程中对不变式的验证，"Distributed Snapshot"一文，也基于状态机。但是大部分人读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，是把**整个分布式系统，描述成了一个状态机**。如果你觉得分布式系统应该是N个状态机而不是一个状态机，那么你应该
 
-Lamport有几篇大名鼎鼎的文章，其中包括"Time, Clocks"一文。但是这篇文章描述的东西到底是啥目的？都能干什么呢？
+Lamport在自己的主页上说，"Time, Clocks and the Ordering of Events in a Distributed System" [1]是他被引用最多的文章，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。[原文链接](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)
 
- 
+>It didn't take me long to realize that an algorithm for totally ordering events could be used to implement any distributed system. A distributed system can be described as a particular sequential state machine that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
+>
+>This is my most often cited paper. Many computer scientists claim to have read it. **But I have rarely encountered anyone who was aware that the paper said anything about state machines.** People seem to think that it is about either the causality relation on events in a distributed system, or the distributed mutual exclusion problem. People have insisted that there is nothing about state machines in the paper. I've even had to go back and reread it to convince myself that I really did remember what I had written. 
 
-要先画理论架构图：
+ 本文主要包括两个部分：
 
-  [在这里画的图](https://app.lucidchart.com/documents/edit/191d2421-6e8c-4233-ab5d-563d1c65875d/0_0) (ppt)
+- 讨论状态机、不变式及其在分布式系统正确性验证、证明方面的应用，这些内容主要来自于[2]；
+- 讨论为什么能够把分布式系统用一个状态机来描述，内容主要来自于"Time, Clocks"一文；
 
- 
+个人对Lamport一些理论间的关系，总结如下：
 
- 
-
-如果我们梳理下Lamport的一些Paper，就会发现不少 paper 都基于状态机理论。比如，distributed snapshot，以及近期一直在推广的形式化验证(TLA+)，全部都基于State Machine来形式化和推导。
-
- 
-
-那么，Lamport所说的状态机，与我们平时所说的有什么区别呢？ 关键差别在于，把整个分布式系统，可以看成是一个状态机（注意，是一个，只有一个！）。
-
-但是在一个分布式系统中， 多个机器、进程可都是独立运行的，我们甚至不能要求这些机器间的时钟是同步的，又如何只用一个状态机描述呢？ 我们先从一个生活中的例子说起。
-
-
-
- 为什么要把分布式系统看成一个状态机？
+[在这里画的图](https://app.lucidchart.com/documents/edit/191d2421-6e8c-4233-ab5d-563d1c65875d/0_0) (ppt)
 
  
 
-狭义相对论告诉我们，不存在一个不变的时空中事件的总顺序，不同的观察者可能就两个事件谁先发生产生分歧。但是部分顺序是存在的，如果e1可以因果影响e2，则事件e1早于事件e2仅存在部分顺序。
+For now, I take the simplest: a computation is a sequence of steps, which I call a behavior.
+
+
+
+which views computations as partially ordered sets of events, is given in [7].
+
+
+
+
+
+# 2. 为什么可以把整个分布式系统看成一个状态机？
+
+## 2.1 状态机的串行性 vs 分布式系统的并行性
+
+
+
+## 2.2 如何把分布式系统变成串行的状态机？ 
+
+狭义相对论告诉我们，不存在一个不变的时空中事件的总顺序，不同的观察者可能就两个事件谁先发生产生分歧。但是部分顺序是存在的，如果e1可以因果影响e2，则事件e1早于事件e2(存在部分顺序)。
 
 > Special relativity teaches us that there is no invariant total ordering of events in space-time; different observers can disagree about which of two events happened first. 
 >
 >  There is only a partial order in which an event e1 precedes an event e2 iff e1 can causally affect e2. 
 
-例子：
+### 2.2.1 一个生活中的例子：
 
 假设小明和小华想把他们周末某一天的生活记录下来，做成一个短视频，放到某短视频平台上。他们各自用手机自拍了一些镜头，让你负责剪辑，做成一个短视频。你在剪辑过程中，哪些顺序是不能随便替换的？哪些是无所谓的？
 
@@ -48,8 +59,6 @@ Lamport有几篇大名鼎鼎的文章，其中包括"Time, Clocks"一文。但�
 6. 他们一起坐西郊观光线回家；
 7. 他们回家后各自发朋友圈。
 
- 
-
 如果不考虑倒叙，部分画面间是不能随便调整顺序的，部分是可以的。比如： 
 
 - 小明和小华的刷牙顺序，哪个先放？ 无所谓，可以随便调整。
@@ -61,15 +70,15 @@ Lamport有几篇大名鼎鼎的文章，其中包括"Time, Clocks"一文。但�
 
 显然，你可以通过合理的剪辑，把小明和小华一天的生活，做成一个看起来不穿帮、合理的小视频。甚至本来小明刷牙更早，但是你剪辑后，小华刷牙的画面在前面，却没人发现。
 
-明明是两个独立的人，看起来完全并发，为什么把他两的部分生活画面按照某个顺序剪辑出来，即使有些被点到顺序，看起来却没有穿帮，好像很合理呢？而有些画面顺序又不能调整？ 这就要回到 Lamport 的paper的关键概念： partial order 和 total order。
+明明是两个独立的人，看起来完全并发，为什么把他两的部分生活画面按照某个顺序剪辑出来，即使有些被点到顺序，看起来却没有穿帮，好像很合理呢？而有些画面顺序又不能调整？ 这就要回到 Lamport 的paper的关键概念： partial order 和 total order。      
 
-​      
+### 2.2.2 偏序和全序
 
-部分序和全局序：
+   Partial ordering 是指那些有逻辑依赖关系的事件之间的顺序，不能修改。这些事件是所有事件的一部分，所以称为Partial。另外，偏序关系具有非对称、传递性和反自反性。
 
-   Partial ordering 是指那些有逻辑依赖关系的事件之间的顺序，不能修改。这些时间是所有事件的一部分，所以称为Partial。
+而Total Ordering是指所有的Event之间都有一个顺序关系。在分布式系统中，这并不容易，所以才有了Lamport的"Time, Clock"一文。
 
-而Total Ordering是让全部的事件，都有了一个顺序，虽然有些并不是必须的。
+
 
 比如，小王在观看这个纪录片时，看到了小华洗脸发生在小明洗脸之前，但是事实上不一定如此，这依赖于如何剪辑影片。不过这个无所谓，因为我们最终呈现的是一个确定的合乎逻辑的一幕幕即可。
 
@@ -83,20 +92,17 @@ Lamport有几篇大名鼎鼎的文章，其中包括"Time, Clocks"一文。但�
 
 为什么有些画面不能调整顺序？因为有依赖关系，这种依赖关系有两种：
 
-- **每个人自己的事情间的相互顺序**，比如，小明先刷牙后洗脸，然后打电话约小华，游览完成才发朋友圈。如果纪录片中小明先发朋友圈，后坐车去公园，就乱套了。
+- **每个人自己完成的事情间的相互顺序**，比如，小明先刷牙后洗脸，然后打电话约小华，游览完成才发朋友圈。如果纪录片中小明先发朋友圈，后坐车去公园，就乱套了。
 - 不同的人，所做的事情间的顺序也有些顺序，这些顺序是因为他们之间的交互引起的。比如，小明跟小华一起坐车去公园这一刻，就是一个明确的时间点，它让二者之间建立了一个明确的联系，小明在公园拍照，不可能在小华刷牙之前，因为二者一起坐车去的公园。     小华刷牙 -> 二人坐车去公园 -> 小明在公园拍照。所以有 小华刷牙     -> 小明在公园拍照。
 
  
 
-1. Partial Ordering只有一种，是确定的。
+1. Partial Ordering只有唯一的一个，是确定的。
 
- 
+1. Total Ordering可以有多种，但是可能我们可以选择按照其中一种执行。
+2. 对于形式化验证，可能要穷举所有可能的Total Order。
 
-1. Total Ordering可以有多种，但是可能我们最终选择了一种。
-
- 
-
- 
+  
 
 可能有大量的状态序列(每个序列有大量的状态)
 
@@ -108,20 +114,21 @@ Lamport有几篇大名鼎鼎的文章，其中包括"Time, Clocks"一文。但�
 - 基于不变式的归纳法证明，也是基于状态机理论。
 - 在做形式化验证时，可以穷举所有可能的状态序列，去验证每个状态序列是否都是允许出现的，从而验证算法或者协议的正确性。例如，验证cache算法会不会出现同一个同一个数据的两份不同的cache，违背了一致性。如果没有状态序列的概念，完全看成杂乱无章的变化，连穷举都不可能。
 
- 
+  
 
- 
+### 2.2.3 怎么确定一个total order?
 
- 
-
-怎么确定一个total order?
-
-- 如果有logical     clock，可以让logical time相同的event，根据host id来排序下。
+- 如果有logical    clock，可以让logical time相同的event，根据host id来排序下。
 
 
 
+# 3. 不变式和归纳法
 
 
-[1] 
 
-[2] https://lamport.azurewebsites.net/pubs/state-machine.pdf
+
+
+[1]  **Time, Clocks and the Ordering of Events in a Distributed System**, Lamport, *Communications of the ACM 21*, 7  (July 1978), 558-565
+
+[2]**Computation and State Machines**,  https://lamport.azurewebsites.net/pubs/state-machine.pdf
+
