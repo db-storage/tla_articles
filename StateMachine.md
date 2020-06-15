@@ -1,10 +1,10 @@
-# 用一个状态机描述整个分布式系统？谈谈Lamport被误读的"Time, Clock"一文以及状态机
+# 用一个状态机描述整个分布式系统？谈谈Lamport被误读的"Time, Clock"一文
 
-# 1. 概要
+# 0. 概要
 
-在阅读Lamport的Paper、学习TLA+形式化验证过程中，发现状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机和 Model Checker运行过程中对不变式的验证，"Distributed Snapshot"一文，也基于状态机。但是大部分人读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，是把**整个分布式系统，描述成了一个状态机**。如果你觉得分布式系统应该是N个状态机而不是一个状态机，那么你应该
+在阅读Lamport的Paper、学习TLA+形式化验证过程中，发现状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机模型和 Model Checker 运行过程中对不变式的验证，"Distributed Snapshot"一文，也基于状态机。但是大部分人读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式系统，描述成了一个状态机**。
 
-Lamport在自己的主页上说，"Time, Clocks and the Ordering of Events in a Distributed System" [1]是他被引用最多的文章，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。[原文链接](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)
+Lamport在自己的主页上说，"Time, Clocks and the Ordering of Events in a Distributed System" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。[原文链接](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)
 
 >It didn't take me long to realize that an algorithm for totally ordering events could be used to implement any distributed system. A distributed system can be described as a particular sequential state machine that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
 >
@@ -12,8 +12,8 @@ Lamport在自己的主页上说，"Time, Clocks and the Ordering of Events in a 
 
  本文主要包括两个部分：
 
-- 讨论状态机、不变式及其在分布式系统正确性验证、证明方面的应用，这些内容主要来自于[2]；
-- 讨论为什么能够把分布式系统用一个状态机来描述，内容主要来自于"Time, Clocks"一文；
+- 讨论计算、状态机、不变式及它们在正确性验证、证明方面的应用，这些内容主要来自于[2]；
+- 讨论为什么能够把分布式系统用**一个**状态机来(注意：是一个)描述，以及带来的好处。内容主要来自于"Time, Clocks"一文；
 
 个人对Lamport一些理论间的关系，总结如下：
 
@@ -29,7 +29,17 @@ which views computations as partially ordered sets of events, is given in [7].
 
 
 
+# 1. 计算、状态机、不变式和归纳法
 
+$$
+\begin{split}
+&S1. \quad s_1  \in \mathcal{I} \\
+&S2. \quad \forall i,  <s_i, s_{i+1}>  \in \mathcal{N}\\
+&S3. 如果一个行为是有限的，那么它终结于状态s，且不存在<s,t>\in\mathcal{N}\\
+\end{split}
+$$
+
+如果一个状态机的是确定性的(deterministic)，如果它的next-state 关系 $\mathcal{N}$是个函数，即对于任意状态$s$，只有一个状态$t$，满足$<s, t> \in \mathcal{N}$。
 
 # 2. 为什么可以把整个分布式系统看成一个状态机？
 
