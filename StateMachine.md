@@ -2,11 +2,11 @@
 
 # 0. 概要
 
-在阅读Lamport的Paper、学习TLA+形式化验证过程中，发现状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机模型和 Model Checker 运行过程中对不变式的验证，"Distributed Snapshot"一文，也基于状态机。但是大部分人读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式系统，描述成了一个状态机**。
+状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机模型和 Model Checker 运行过程中对不变式的验证，"Distributed Snapshot"的有效性证明，也基于状态机。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式系统，描述成了一个状态机**。
 
-Lamport在自己的主页上说，"Time, Clocks and the Ordering of Events in a Distributed System" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。[原文链接](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)
+Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。[原文链接](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)
 
->It didn't take me long to realize that an algorithm for totally ordering events could be used to implement any distributed system. A distributed system can be described as a particular sequential state machine that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
+> A distributed system can be described as a particular sequential state machine that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
 >
 >This is my most often cited paper. Many computer scientists claim to have read it. **But I have rarely encountered anyone who was aware that the paper said anything about state machines.** People seem to think that it is about either the causality relation on events in a distributed system, or the distributed mutual exclusion problem. People have insisted that there is nothing about state machines in the paper. I've even had to go back and reread it to convince myself that I really did remember what I had written. 
 
@@ -21,16 +21,11 @@ Lamport在自己的主页上说，"Time, Clocks and the Ordering of Events in a 
 
  
 
-For now, I take the simplest: a computation is a sequence of steps, which I call a behavior.
-
-
-
-which views computations as partially ordered sets of events, is given in [7].
-
 
 
 # 1. 计算、状态机、不变式和归纳法
 
+状态机可以从以下几个方面来描述：状态集合 $ \mathcal{S}$ ，初始状态集合 $ \mathcal{L}$ 和$ \mathcal{S}$ 上的next-state 关系 $ \mathcal{N}$ 。其中 $ \mathcal{L} \subseteq  \mathcal{S}$ ，  $ \mathcal{N} \subseteq  \mathcal{S} \times \mathcal{S}$ 。  它产生各种行为(behavior)，每个behavior可以表示成 $s_1 \rightarrow s_2 \rightarrow s_3...$ 的形式，并且满足：
 $$
 \begin{split}
 &S1. \quad s_1  \in \mathcal{I} \\
@@ -39,7 +34,31 @@ $$
 \end{split}
 $$
 
-如果一个状态机的是确定性的(deterministic)，如果它的next-state 关系 $\mathcal{N}$是个函数，即对于任意状态$s$，只有一个状态$t$，满足$<s, t> \in \mathcal{N}$。
+其中，$<s_i, s_{i+1}>$表示从状态$s_i$转变到状态$s_{i+1}$。如果一个状态机的是确定性的(deterministic)，如果它的next-state 关系 $\mathcal{N}$是个函数，即对于任意状态$s$，只有一个状态$t$，满足$<s, t> \in \mathcal{N}$。非确定性的则是允许从一个状态转变为多个状态。
+
+简单来说，可以把 $ \mathcal{N}$ 理解成输入和输出都属于$ \mathcal{S}$ 的动作。
+
+The purpose of this note is to indicate how computation is expressed with
+state machines and how doing so can clarify the concepts underlying the
+disparate languages for describing computations. 
+
+
+
+For now, I take the simplest: a computation is a
+sequence of steps, which I call a behavior.
+
+
+
+There are three common choices
+for what a step is, leading to three difierent kinds of behavior:
+
+
+
+Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，如果用状态机表示的计算来说。
+
+**计算/行为才是本质，而不是语言或者形式**。
+
+
 
 # 2. 为什么可以把整个分布式系统看成一个状态机？
 
