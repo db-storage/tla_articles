@@ -1,8 +1,12 @@
-# 用一个状态机描述整个分布式系统？谈谈Lamport被误读的"Time, Clock"一文
+# 用一个状态机描述分布式计算？串以下Lampor关于状态机的几篇文章
 
 # 0. 概要
 
-状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机模型和 Model Checker 运行过程中对不变式的验证，"Distributed Snapshot"的有效性证明，也基于状态机。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式系统，描述成了一个状态机**。
+本文把Lamport关于状态机的几篇文章串起来，以及这些文章间的关系。包括如何把分布式计算中并发的event顺序化(Total Ordering )并用状态机描述[1]；然后介绍下基于状态机和不变式的强归纳法证明[2]。
+
+状态机贯穿了Lamport的大量研究。例如，Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；TLA+的验证基于状态机模型和 Model Checker 运行过程中对不变式的验证，"Distributed Snapshot"的有效性证明，也基于状态机。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式计算，描述成了一个状态机**。
+
+为什么用状态机描述不同的计算？按照Lamport的观点，包括：1) 大部分计算都可以用状态机来描述，无论是一段代码、一个分布式算法还是图灵机，无论它是用何种语言来描述的；2) 状态机的本质是数学，且只使用了简单的数学模型(集合、逻辑运算等)，通过数学更容易看到问题的本质，发现共通的东西，而大部分人沉迷于某种语言的特点，而忽视了问题的本身。注意，理解问题本质并不是说实现不重要，而是说在讨论原理性、正确性问题时，更需要用数学方法，在解决原理性问题后，具体语言和实现的方式就变得很重要。
 
 Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。[原文链接](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)
 
@@ -10,10 +14,7 @@ Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用�
 >
 >This is my most often cited paper. Many computer scientists claim to have read it. **But I have rarely encountered anyone who was aware that the paper said anything about state machines.** People seem to think that it is about either the causality relation on events in a distributed system, or the distributed mutual exclusion problem. People have insisted that there is nothing about state machines in the paper. I've even had to go back and reread it to convince myself that I really did remember what I had written. 
 
- 本文主要包括两个部分：
 
-- 讨论计算、状态机、不变式及它们在正确性验证、证明方面的应用，这些内容主要来自于[2]；
-- 讨论为什么能够把分布式系统用**一个**状态机来(注意：是一个)描述，以及带来的好处。内容主要来自于"Time, Clocks"一文；
 
 个人对Lamport一些理论间的关系，总结如下：
 
@@ -60,11 +61,15 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 
 
-# 2. 为什么可以把整个分布式系统看成一个状态机？
+# 2. 为什么可以把整个分布式计算看成一个状态机？
 
-## 2.1 状态机的串行性 vs 分布式系统的并行性
+注意，行为分为有限和无限的。我们通常讨论的计算行为都是有限的，都会正常结束或者死锁。但是有些行为是无限的，比如一台冯诺依曼计算机，把它看成个状态机，则状态可以认为是无限的。
 
+## 2.1 状态机行为的串行性 vs 分布式计算的并行性
 
+观察状态机的执行过程，我们会发现，虽然状态机的行为是个集合，即允许有很多种行为，但是在每次运行过程中，是按照某一个Bahavior 中的状态在一步一步顺序变化的。但是如果考虑一个多节点的分布式计算，多个节点是可以并行执行的，如何对应到状态机的串行化的行为上？
+
+简单来说，分布式计算中，只有少数event之间是真的有顺序依赖关系的(Partial Ordering)，且是确定的。而大部分事件间的顺序并不重要，即使在物理上确实有先后，只要保证了那些确定性的Partial Order被保持，就可以把所有的并发event看成一个顺序化的event 序列，相当于给所有的event做了个排序，这个顺序被称为Total Order。
 
 ## 2.2 如何把分布式系统变成串行的状态机？ 
 
