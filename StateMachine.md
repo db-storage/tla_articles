@@ -1,4 +1,4 @@
-# 用一个状态机描述分布式计算？串以下Lampor关于状态机的几篇文章
+# N个节点的分布式计算用一个状态机描述？串以下Lampor关于状态机的几篇文章
 
 # 0. 概要
 
@@ -20,11 +20,11 @@ Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用�
 
 [在这里画的图](https://app.lucidchart.com/documents/edit/191d2421-6e8c-4233-ab5d-563d1c65875d/0_0) (ppt)
 
- 
 
 
 
-# 1. 计算、状态机、不变式和归纳法
+
+# 1. 计算和状态机
 
 状态机可以从以下几个方面来描述：状态集合 $ \mathcal{S}$ ，初始状态集合 $ \mathcal{L}$ 和$ \mathcal{S}$ 上的next-state 关系 $ \mathcal{N}$ 。其中 $ \mathcal{L} \subseteq  \mathcal{S}$ ，  $ \mathcal{N} \subseteq  \mathcal{S} \times \mathcal{S}$ 。  它产生各种行为(behavior)，每个behavior可以表示成 $s_1 \rightarrow s_2 \rightarrow s_3...$ 的形式，并且满足：
 $$
@@ -159,6 +159,20 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 # 3. 不变式和归纳法
 
 
+
+# 4. FAQ
+
+## FAQ 1.  Total Ordering的意义是什么？
+
+从[1] 中我们可以看出，给每个用户请求排个序，让所有节点按照这个顺序得到统一的优先级，也是一个用途。
+
+从基于归纳法证明正确性的角度，归纳法的基本模型都是：如果当 $n<=k-1$时某个式子成立，证明$n=k$时也成立。如果我们不能将其串行化，这个归纳法模型是什么呢？从数学的角度就很难说清楚。
+
+
+
+## FAQ 2: Total Ordering既然有多重，在归纳法证明状态机正确性时，选择的是哪一个?
+
+事实上不需要选择哪一个，证明过程依赖于依赖于当前状态和下一个步骤，任意一个可能存在的Total Order都是正确的。
 
 
 
