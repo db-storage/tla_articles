@@ -75,6 +75,26 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 > Special relativity teaches us that there is no invariant total ordering of events in space-time; different observers can disagree about which of two events happened first. There is only a partial order in which an event e1 precedes an event e2 iff e1 can causally affect e2. 
 
+具体内容来自：[链接](https://www.phy.sdu.edu.cn/wlx_v3/chpt08/zds_08_02.htm)
+
+>  二、狭义相对论的时空观(§8-2)
+>
+>   \1. 同时性的相对性
+>
+>   (1) 同时性的相对性所包含的结论可以概括为以下两条：
+>
+>   a) 发生在空间不同地点的两个事件，同时性是相对的，会因惯性参考系的不同而不同。
+>
+>   b)  发生在空间同一地点的两个事件，同时性不因惯性参考系的不同而差异。
+>
+>   (2) 承认了光速不变原理，就不能再把时间看为与空间无关的均匀流逝的长河，而必须把时间和空间放到同等的地位上，共同构成一个统一的四维空间。
+>
+>   (3) 同时性的相对性实质上意味着空间距离与时间间隔可以相互转换，在一个惯性参考系中的空间距离反映到另一个惯性参考系中就表现为时间间隔。
+>
+>   (4) 同时性的相对性表明，在某个观察者看来是同时发生的事件，对另一个作相对运动的观察者来说也许不是同时发生的；反之亦然。谁是正确的呢？这个问题显然是没有意义的。只能说两个观察者都是“正确”的，因为每个观察者都不过是测量他自己所看到的事件。
+>
+>   (5) 虽然同时性是相对的，但是，对于任何观察者来说，**时间不会倒流，因果关系不会颠倒**。例如，某处在*t*1 , *t*2 , *t*3 ,…相继发生的一系列关联事件，对于不同惯性参考系中的所有观察者来说，尽管每两个关联事件之间的时间间隔*t*2 - *t*1, *t*3 - *t*2, …不一定相同，但都呈现了相同的顺序。而对于非关联事件，时序是可以颠倒的。
+
 ## 2.2 如何把分布式系统变成串行的状态机？ 
 
 狭义相对论告诉我们，不存在一个不变的时空中事件的总顺序，不同的观察者可能就两个事件谁先发生产生分歧。但是部分顺序是存在的，如果e1可以因果影响e2，则事件e1早于事件e2(存在部分顺序)。
@@ -91,7 +111,7 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 1. 小明和小华早起后各自刷牙洗脸、下楼(假设他们住在不同的房子里，不用抢洗手间)；
 2. 小明和小华一起坐西郊观光线去香山公园；
-3. 他们分别公园门口买了一个山东煎饼了；
+3. 他们分别公园门口买了一个山东煎饼；
 4. 他们在香炉峰、双清别墅各自拍照；
 5. 还有些其他的零散的赏景镜头；
 6. 他们一起坐西郊观光线回家；
@@ -106,13 +126,13 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 ​      
 
-显然，你可以通过合理的剪辑，把小明和小华一天的生活，做成一个看起来不穿帮、合理的小视频。甚至本来小明刷牙更早，但是你剪辑后，小华刷牙的画面在前面，却没人发现。
+显然，你可以通过合理的剪辑，把小明和小华一天的生活，做成一个看起来不穿帮的小视频。甚至本来小明比小华刷牙更早，但是你剪辑后，小华刷牙的画面在前面，却没人发现。
 
 明明是两个独立的人，看起来完全并发，为什么把他两的部分生活画面按照某个顺序剪辑出来，即使有些被点到顺序，看起来却没有穿帮，好像很合理呢？而有些画面顺序又不能调整？ 这就要回到 Lamport 的paper的关键概念： partial order 和 total order。      
 
 ### 2.2.2 偏序和全序
 
-   Partial ordering 是指那些有逻辑依赖关系的事件之间的顺序，不能修改。这些事件是所有事件的一部分，所以称为Partial。另外，偏序关系具有非对称、传递性和反自反性。
+   Partial ordering 是指那些有因果依赖关系的事件之间的顺序，不能修改。这些事件是所有事件的一部分，所以称为Partial。另外，偏序关系具有非对称、传递性和反自反性。
 
 而Total Ordering是指所有的Event之间都有一个顺序关系。在分布式系统中，这并不容易，所以才有了Lamport的"Time, Clock"一文。
 
@@ -135,7 +155,7 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
  
 
-1. Partial Ordering只有唯一的一个，是确定的。
+1. Partial Ordering 只有唯一的一个，是确定的。
 
 1. Total Ordering可以有多个，但是可能我们可以选择按照其中一个执行。
 2. 对于形式化验证，可能要穷举所有可能的Total Order。
@@ -148,7 +168,7 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 为什么需要用状态序列去描述？
 
-- 可以用数学去描述过程，以及可以做适当的变化，例如分布式快照一文正确性证明过程，就依赖于可以将一个状态序列S1，经过不违背Partial     Ordering的变换，变成快照状态S2，从而证明快照是个可达的合法状态，即使不是真的在某个时刻存在过；
+- 可以用数学去描述过程，并可以做适当的事件顺序调整，例如分布式快照一文正确性证明过程，就依赖于可以将一个状态序列S1，经过不违背Partial  Ordering的变换，变成快照状态S2，从而证明快照是个可达的合法状态，即使不是真的在某个时刻存在过；
 - 基于不变式的归纳法证明，也是基于状态机理论。
 - 在做形式化验证时，可以穷举所有可能的状态序列，去验证每个状态序列是否都是允许出现的，从而验证算法或者协议的正确性。例如，验证cache算法会不会出现同一个同一个数据的两份不同的cache，违背了一致性。如果没有状态序列的概念，完全看成杂乱无章的变化，连穷举都不可能。
 
@@ -156,11 +176,30 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 ### 2.2.3 怎么确定一个total order?
 
-- 如果有logical    clock，可以让logical time相同的event，根据host id来排序下。
+- 如果有logical  clock，可以让 logical time 相同的event，根据 host id 来排序下。
 
 
 
 # 3. 不变式和归纳法
+
+如果一个状态机的每一个可达状态都满足某个谓词，则称该谓词是状态机的一个不变式(invariant)。
+
+不变式对于理解算法和程序非常重要。比如，一个循环不变式（loop invariant) L 在循环的开始时总是成立，如果用$AtLoop$表示执行到循环开始的位置，则有$AtLoop \implies L$。
+
+一个状态变化谓词(transition predicate) $T$，当且仅当  $Inv \land T \implies Inv'$ 成立时，称其为$leave \space invariant$，其中$Inv'$表示执行状态变化后，所有状态变量能满足式子 $Inv$。也就是说，如果状态 $s$ 满足$Inv$，并且状态变化 $<s, t>$ 满足 T，那么状态 $t$ 也满足$Inv$。
+
+如果一个状态机在初始状态($Init$) 满足$Inv$，且其next-state函数保持$Inv$ 成立，那么 $Inv$ 就是这个状态机的不变式。这个不变式也被称为状态机的**归纳不变式**($inductive \space invariant$)。在证明状态机满足某个不变式 $P$ (姑且称为目标不变式) 时，直接证明$P$是归纳不变式 我们可能会找到另外一个更苛刻的谓词$Inv$，然后证明$Inv$是状态机的归纳不变式。再结合$Inv \implies P$，即可证明$P$是状态机的不变式。注意，我们不一定能得出 $ P \land Next \implies P'$，所以才借助条件更苛刻的 $Inv$。
+
+> A simple induction argument shows that if Inv is implied by the initial predicate Init and is left invariant by the next-state predicate Next, then Inv is an invariant of the state machine. Such an invariant is called an inductive invariant of the state machine. The inductive invariant method proves that P is an invariant
+> of a state machine by flnding an inductive invariant Inv that implies P. In other words, it consists of flnding a formula Inv that satisfles:
+
+$$
+\begin{split}
+&I1.\quad Init \implies Inv\\
+&I2.\quad Inv \land Next \implies Inv'\\
+&I3.\quad Inv \implies P
+\end{split}
+$$
 
 
 
