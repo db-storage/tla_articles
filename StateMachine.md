@@ -1,4 +1,4 @@
-# N个节点的分布式计算用一个状态机描述？串以下Lampor关于状态机的几篇文章
+# N个节点的分布式计算用一个状态机描述？串一下Lampor关于状态机的几篇文章
 
 # 0. 概要
 
@@ -188,11 +188,7 @@ Figure 1 里面的三个C程序，看起来相近的，其实不是最近的，�
 
 一个状态变化谓词(transition predicate) $T$，当且仅当  $Inv \land T \implies Inv'$ 成立时，称其为$leave \space invariant$，其中$Inv'$表示执行状态变化后，所有状态变量能满足式子 $Inv$。也就是说，如果状态 $s$ 满足$Inv$，并且状态变化 $<s, t>$ 满足 T，那么状态 $t$ 也满足$Inv$。
 
-如果一个状态机在初始状态($Init$) 满足$Inv$，且其next-state函数保持$Inv$ 成立，那么 $Inv$ 就是这个状态机的不变式。这个不变式也被称为状态机的**归纳不变式**($inductive \space invariant$)。在证明状态机满足某个不变式 $P$ (姑且称为目标不变式) 时，直接证明$P$是归纳不变式 我们可能会找到另外一个更苛刻的谓词$Inv$，然后证明$Inv$是状态机的归纳不变式。再结合$Inv \implies P$，即可证明$P$是状态机的不变式。注意，我们不一定能得出 $ P \land Next \implies P'$，所以才借助条件更苛刻的 $Inv$。
-
-> A simple induction argument shows that if Inv is implied by the initial predicate Init and is left invariant by the next-state predicate Next, then Inv is an invariant of the state machine. Such an invariant is called an inductive invariant of the state machine. The inductive invariant method proves that P is an invariant
-> of a state machine by flnding an inductive invariant Inv that implies P. In other words, it consists of flnding a formula Inv that satisfles:
-
+如果一个状态机在初始状态($Init$) 满足$Inv$，且其next-state函数保持$Inv$ 成立，那么 $Inv$ 就是这个状态机的不变式。这个不变式也被称为状态机的**归纳不变式**($inductive \space invariant$)。在证明状态机满足某个不变式 $P$ (姑且称为目标不变式) 时，直接证明$P$是归纳不变式 我们可能会找到另外一个更苛刻的谓词$Inv$，然后证明$Inv$是状态机的归纳不变式。再结合$Inv \implies P$，即可证明$P$是状态机的不变式。注意，我们不一定能得出 $ P \land Next \implies P'$，所以才借助条件更苛刻的 $Inv$。简单来说，状态机的归纳法证明可以用下面的式子表示：
 $$
 \begin{split}
 &I1.\quad Init \implies Inv\\
@@ -200,7 +196,6 @@ $$
 &I3.\quad Inv \implies P
 \end{split}
 $$
-
 
 
 # 4. FAQ
