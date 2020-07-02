@@ -126,9 +126,9 @@ Partial ordering 是指那些有因果关系的事件之间的顺序，不能修
 
  
 
-1. Partial Ordering 只有唯一的一个，是确定的。
+1. Partial Order 只有唯一的一个，是确定的。
 
-2. Total Ordering可以有多个，但是可能我们可以选择按照其中一个执行。
+2. Total Order 可以有多个，可以选择按照其中一个执行，结果应该相同。
 
     
 
@@ -142,7 +142,8 @@ Partial ordering 是指那些有因果关系的事件之间的顺序，不能修
 
 ### 2.2.3 怎么确定一个total order?
 
-- 如果有logical  clock，可以让 logical time 相同的event，根据 host id 来排序下。
+- Logical time自身的值，作为Partial Order的依据；
+- Logical time 相同的event，根据 host id 来排序。
 
 
 
@@ -173,8 +174,6 @@ $$
 
 
 ## FAQ 2: Total Order既然可以有很多个，在归纳法证明时，选哪个?
-
-事实上不需要选择哪一个，证明过程依赖于依赖于当前状态和下一个步骤，需要保证任意一个可能的Total Order都是正确的。
 
 在证明过程中，并不需要某一个具体的 Total Order。只要确定 $Init$ 和 $Next$ 分别满足什么，能得出什么结论即可。
 
