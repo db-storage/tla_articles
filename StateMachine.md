@@ -147,6 +147,8 @@ Partial ordering 是指那些有因果关系的事件之间的顺序，不能修
 
 # 3. 不变式和归纳法证明
 
+## 3.1 基本概念和过程 
+
 如果一个状态机的每一个可达状态都满足某个谓词，则称该谓词是状态机的一个不变式(invariant)。
 
 一个状态变化谓词(transition predicate) $T$，当且仅当  $Inv \land T \implies Inv'$ 成立时，称其$T$ 保持不变式 $Inv$ 成立，其中$Inv'$表示执行状态变化后，新状态还满足式子 $Inv$。也就是说，如果状态 $s$ 满足$Inv$，并且状态变化 $<s, t>$ 满足 T，那么状态 $t$ 也满足$Inv$。
@@ -159,6 +161,79 @@ $$
 &I3.\quad Inv \implies P
 \end{split}
 $$
+
+
+
+## 3.2 Paxos的证明，如何对应到这个式子？
+
+
+
+$Inv == VotesSafe \land OneValuePerBallot$
+
+$VotesSafe == \forall a \in Acceptor, b \in Ballot, v \in Value : VotedFor(a, b, v) => SafeAt(b, v)$
+
+
+
+$AllSafeAtZero == \forall v \in Value : SafeAt(0, v)$
+
+$AllSafeAtZero => Inv$
+
+
+
+### Init是成立
+
+$I1: Init => AllSafeAtZero$
+
+### Phase1a成立
+
+$Inv \land Phase1a  => Inv'$
+
+修改的变量，不影响任何Inv的成立。
+
+1) 没有产生任何的 $VotedFor(a, b, v)$；
+
+2) 没有产生任何的(b, v)，不影响 $OneValuePerBallot$
+
+
+
+### Phase1b成立
+
+$Inv \land Phase1b  => Inv'$
+
+同上。
+
+### Phase2a成立
+
+$Inv \land Phase2a  => Inv'$
+
+产生了新的 $<b, v>$。需要证明它不影响 $OneValuePerBallot$。
+
+由于Phase1a 是 $>$，不是$>=$，同一个Ballot不可能出现两个Value。
+
+如何证明 $SafeAt(b,v)$? 
+
+
+
+### Phase2b成立
+
+$Inv \land Phase2b  => Inv'$
+
+不产生新的$<b, v>$，只是影响了$VotedFor(a, b, v)$。那么这个Vote是否Safe? 
+
+实际上Phase2a已经解决了SafeAt(b, v)的问题。
+
+如果某个voter，在Phase2b前，执行了一个ballot更大的 Phase1b，**现在再执行2b，从这个证明过程中能体现出来么**？
+
+==> 感觉是在证明Phase2a时，用了这个特性？ 否则就保证不了 $SafeAt(b,v)$。
+
+
+
+
+
+
+
+
+
 
 
 # 4. FAQ
