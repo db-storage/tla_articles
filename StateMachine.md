@@ -184,7 +184,7 @@ $AllSafeAtZero => Inv$
 
 $I1: Init => AllSafeAtZero$
 
-### Phase1a成立
+### 对 Phase1a 成立
 
 $Inv \land Phase1a  => Inv'$
 
@@ -194,15 +194,46 @@ $Inv \land Phase1a  => Inv'$
 
 2) 没有产生任何的(b, v)，不影响 $OneValuePerBallot$
 
+由于没有改变任何 Acceptor 的状态，$VotesSafe$ 和$OneValuePerBallot$ 都不受影响。
 
 
-### Phase1b成立
+
+### 对 Phase1b 成立
 
 $Inv \land Phase1b  => Inv'$
 
-同上。
+没有执行Accept，也没有产生新的Value。需要证明的是：已有的Vote/Value，是安全的。
 
-### Phase2a成立
+
+
+主要是证明$VotesSafe$，即已经$VotedFor(a,b,v) \implies SafeAt(b,v)$ 
+$$
+\begin{split}SafeAt(b, v) &\triangleq \\ &\forall c \in [0,(b-1)] : NoneOtherChoosableAt(c, v)\end{split}
+$$
+
+$$
+\begin{split}
+NoneOther&ChoosableAt(b, v) \triangleq \\
+&\exists Q \in Quorum : \\
+     & \qquad \forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)
+     \end{split}
+$$
+
+
+
+$$
+\begin{split}
+
+(CannotVoteAt(a_1, b) \lor VotedFor(a_1, b, v))\land Phase1b(a_1, b_1) \\
+ => CannotVoteAt(a_1, b) \lor VotedFor(a_1, b, v)\\
+
+\end{split}
+$$
+ 。因为Phase1b能执行，则必须有 $b<b1$，执行Phase1b后仍然成立。
+
+
+
+### 对 Phase2a 成立
 
 $Inv \land Phase2a  => Inv'$
 
@@ -214,7 +245,7 @@ $Inv \land Phase2a  => Inv'$
 
 
 
-### Phase2b成立
+### 对 Phase2b 成立
 
 $Inv \land Phase2b  => Inv'$
 
@@ -225,14 +256,6 @@ $Inv \land Phase2b  => Inv'$
 如果某个voter，在Phase2b前，执行了一个ballot更大的 Phase1b，**现在再执行2b，从这个证明过程中能体现出来么**？
 
 ==> 感觉是在证明Phase2a时，用了这个特性？ 否则就保证不了 $SafeAt(b,v)$。
-
-
-
-
-
-
-
-
 
 
 
