@@ -168,25 +168,41 @@ $$
 
 
 
-$Inv == VotesSafe \land OneValuePerBallot$
+$Inv \triangleq VotesSafe \land OneValuePerBallot$
 
-$VotesSafe == \forall a \in Acceptor, b \in Ballot, v \in Value : VotedFor(a, b, v) => SafeAt(b, v)$
+$VotesSafe \triangleq \forall a \in Acceptor, b \in Ballot, v \in Value : VotedFor(a, b, v) => SafeAt(b, v)$
+
+$$
+\begin{split}
+\begin{aligned}
+DidNotVoteAt(a, b) \triangleq \forall v \in Value : ~ VotedFor(a, b, v) \\
+CannotVoteAt(a, b) \triangleq \land maxBal[a] > b \\
+                      \land DidNotVoteAt(a, b)\\
+NoneOtherChoosableAt(b, v) \triangleq \\
+   \exists Q \in Quorum :  \forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)\\
+SafeAt(b, v) \triangleq \forall c \in 0..(b-1) : NoneOtherChoosableAt(c, v)\\
+\end{aligned}
+\end{split}
+$$
+$AllSafeAtZero \triangleq \forall v \in Value : SafeAt(0, v)$
+
+$AllSafeAtZero \implies Inv$
 
 
 
-$AllSafeAtZero == \forall v \in Value : SafeAt(0, v)$
+### Init 时成立
 
-$AllSafeAtZero => Inv$
+$I1: Init \implies AllSafeAtZero$
 
 
 
-### Init是成立
 
-$I1: Init => AllSafeAtZero$
 
 ### 对 Phase1a 成立
 
-$Inv \land Phase1a  => Inv'$
+
+
+$Inv \land Phase1a  \implies Inv'$
 
 修改的变量，不影响任何Inv的成立。
 
@@ -199,6 +215,20 @@ $Inv \land Phase1a  => Inv'$
 
 
 ### 对 Phase1b 成立
+
+**要点：** 假设当前的ballot是b，执行的acceptor是$a$，对于任意已经存在的$<b_1, v_1>$，可以分为三种情况：
+
+1) $b == b_1$，之前$a$一定不属于保证$<b_1, v_1>$的Quorum
+
+2) $b<b_1$, 之前$a$一定不属于保证$<b_1, v_1>$的Quorum
+
+3) $b>b_1$，之前$a$可能属于保证$<b_1, v_1>$的Quorum，也可能不属于。如果不属于，无所谓。如果属于，那么保障的条件，只涉及a在 $<b_1$的quorum上的动作， $>b_1$是不受限制的，不违背承诺。
+
+**其实对于 2b也类似。**
+
+**对于Phase2a，因为它产生了一个新的<b, v>，所以是要考虑自身的Safety以及其他既存的vote**
+
+
 
 $Inv \land Phase1b  => Inv'$
 
