@@ -131,9 +131,9 @@ Partial order 是指那些有因果关系的事件之间的顺序，不能修改
 
 如果一个状态机的每一个可达状态都满足某个谓词，则称该谓词是状态机的一个不变式(Invariant)。
 
-一个状态变化谓词(Transition Predicate) $T$，当且仅当  $Inv \land T \implies Inv'$ 成立时，称其$T$ 保持不变式 $Inv$ 成立，其中$Inv'$表示执行状态变化后，新状态还满足式子 $Inv$。也就是说，如果状态 $s$ 满足$Inv$，并且状态变化 $<s, t>$ 满足 T，那么状态 $t$ 也满足$Inv$。
+一个状态变化谓词(Transition Predicate) $T$，当且仅当  $Inv \land T \implies Inv'$ 成立时，称其$T$ 保持不变式 $Inv$ 成立，其中$Inv'$表示执行状态变化后，新状态还满足式子 $Inv$。也就是说，如果当前状态 $s$ 满足$Inv$，并且状态变化 $<s, t>$ 满足 T，那么状态 $t$ 也满足$Inv$。这里的 $s$ 和 $t$ 是两个具体的状态，$<s,t>$只是一次变化，下面是把它们泛化描述。
 
-如果一个状态机在初始状态($Init$) 满足$Inv$，且其 $NextState$ 函数保证 $Inv$  成立，那么 $Inv$ 就是这个状态机的不变式。也被称为状态机的**归纳不变式**($Inductive \space Invariant$)。在证明状态机满足某个不变式 $P$ (姑且称为目标不变式) 时，可能先找到另外一个更苛刻的谓词$Inv$，然后证明$Inv$是状态机的归纳不变式。再结合$Inv \implies P$，即可证明$P$是状态机的不变式。注意，借助$Inv$，是因为不能直接证明 $ P \land Next \implies P'$。简单来说，归纳法证明某个状态机满足 $P$ 可以用下面的式子表示：
+如果一个状态机在初始状态($Init$) 满足$Inv$，且其 $NextState$ 函数保证 $Inv$  成立，那么 $Inv$ 就是这个状态机的不变式。也被称为状态机的**归纳不变式**($Inductive \space Invariant$)。在证明状态机满足某个不变式 $P$ (称为目标不变式) 时，可能先找到另外一个更苛刻的不变式$Inv$，然后证明$Inv$是状态机的归纳不变式。再结合$Inv \implies P$，即可证明$P$是状态机的不变式。注意，借助$Inv$，是因为不能直接证明 $ P \land Next \implies P'$。简单来说，归纳法证明某个状态机满足 $P$ 可以用下面的式子表示：
 $$
 \begin{split}
 &I1.\quad Init \implies Inv\\
@@ -142,111 +142,21 @@ $$
 \end{split}
 $$
 
+## 3.2 在Paxos正确性证明中的应用
 
+参考之前我的一篇文章：[Paxos的正确性证明](https://zhuanlan.zhihu.com/p/104463008)，本质上也是上述的不变式归纳方法。具体来说，Paxos的Inv是：
 
-## 3.2 Paxos的证明，如何对应到这个式子？
+$Inv \triangleq VotesSafe \land OneVote$
 
-整体来说，证明基于以下方法：
-
-1) 初始状态安全；
-
-2）每个新产生的选票是安全的；
-
-3) 每一步，对于已有的选票是安全的。
-
-
-
-$Inv \triangleq VotesSafe \land OneValuePerBallot$
+其中：
 
 $VotesSafe \triangleq \forall a \in Acceptor, b \in Ballot, v \in Value : VotedFor(a, b, v) => SafeAt(b, v)$
 
-$$
-\begin{split}
-\begin{aligned}
-DidNotVoteAt(a, b) \triangleq \forall v \in Value : ~ VotedFor(a, b, v) \\
-CannotVoteAt(a, b) \triangleq \land maxBal[a] > b \\
-                      \land DidNotVoteAt(a, b)\\
-NoneOtherChoosableAt(b, v) \triangleq \\
-   \exists Q \in Quorum :  \forall a \in Q : VotedFor(a, b, v) \lor CannotVoteAt(a, b)\\
-SafeAt(b, v) \triangleq \forall c \in 0..(b-1) : NoneOtherChoosableAt(c, v)\\
-\end{aligned}
-\end{split}
-$$
-$AllSafeAtZero \triangleq \forall v \in Value : SafeAt(0, v)$
-
-$AllSafeAtZero \implies Inv$
+$ OneVote \triangleq   \forall a \in Acceptor, b \in Ballot, v, w \in Value : VotedFor(a, b, v) \land VotedFor(a, b, w) \implies (v = w)$
 
 
 
-### Init 时成立
-
-$I1: Init \implies AllSafeAtZero$
-
-
-
-
-
-### 对 Phase1a 成立
-
-
-
-$Inv \land Phase1a  \implies Inv'$
-
-修改的变量，不影响任何Inv的成立。
-
-1) 没有产生任何的 $VotedFor(a, b, v)$；
-
-2) 没有产生任何的(b, v)，不影响 $OneValuePerBallot$
-
-由于没有改变任何 Acceptor 的状态，$VotesSafe$ 和$OneValuePerBallot$ 都不受影响。
-
-
-
-### 对 Phase1b 成立
-
-**要点：** 假设当前的ballot是b，执行的acceptor是$a$，对于任意已经存在的选票$<b_1, v_1>$，那么必有一个Quorum $Q1$，它保证了$SafeAt(b_1,v_1)$。可以分为三种情况：
-
-1) $b == b_1$，之前$a$一定不属于$Q1$;
-
-2) $b<b_1$, 之前$a$一定不属于$Q1$;
-
-3) $b>b_1$，之前$a$可能属于$Q1$，也可能不属于。如果不属于，不影响。如果属于，那么保障的条件，只涉及a在 $<b_1$的Ballot上的动作， $>b_1$是不受限制的，不违背承诺。
-
-
-
-**其实对于 2b也类似。**
-
-**对于Phase2a，因为它产生了一个新的<b, v>，所以是要考虑自身的Safety以及其他既存的vote**
-
-
-
-$Inv \land Phase1b  => Inv'$
-
-没有执行Accept，也没有产生新的Value。需要证明的是：已有的Vote/Value，是安全的。
-
-
-
-### 对 Phase2a 成立
-
-$Inv \land Phase2a  => Inv'$
-
-产生了新的 $<b, v>$。需要证明它不影响 $OneValuePerBallot$。
-
-由于Phase1a 是 $>$，不是$>=$，同一个Ballot不可能出现两个Value。
-
-如何证明 $SafeAt(b,v)$? 
-
-
-
-### 对 Phase2b 成立
-
-$Inv \land Phase2b  => Inv'$
-
-不产生新的$<b, v>$，只是影响了$VotedFor(a, b, v)$。那么这个Vote是否Safe? 
-
-实际上Phase2a已经解决了SafeAt(b, v)的问题，即<b, v>自身的安全性。
-
-仍然考虑某个VotedFor如果 a 属于某个$<b_1, v_1>$ 的 Quorum $Q1$，那么。。。
+Paxos 的 NextState 即为 Phase 1a, 1b, 2a, 2b等。
 
 
 
