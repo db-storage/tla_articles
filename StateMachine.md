@@ -154,7 +154,13 @@ $$
 
 ## 4.2 例子
 
+https://surfingcomplexity.blog/2018/12/27/inductive-invariants/
 
+https://www.microsoft.com/en-us/research/publication/teaching-concurrency/
+
+
+
+https://www.cs.rice.edu/~sc40/COMP382/Lectures/week5tutorial.txt
 
 ## 4.3 在Paxos正确性证明中的应用
 
