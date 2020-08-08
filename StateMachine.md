@@ -2,21 +2,23 @@
 
 # 1. 概要
 
-本文把Lamport关于状态机的几篇文章串起来，以及这些文章间的关系。包括如何把分布式计算中并发的 event 顺序化(Total Ordering )并用状态机描述[1]；然后介绍下基于状态机和不变式的强归纳法证明[2]。
+本文把Lamport关于状态机的几篇文章串起来。包括如何把分布式计算中并发的事件顺序化(Total Ordering )并用状态机描述[1]；然后介绍基于状态机和不变式的强归纳法证明[2]。
 
-状态机贯穿了Lamport的大量研究。例如，“Time, Clocks"一文就是在写状态机(见下文)；Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；Lamport 近年来集中精力推广形式化验证( TLA+)是基于状态机模型；"Distributed Snapshot"一文的有效性证明也基于状态机。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式计算，描述成了一个串行化状态机(**sequential state machine**)**。
+之前我曾经写过几篇博客介绍Lamport的一些经典paper，包括分布式快照和Paxos的正确性证明。后来偶然在Lamport的主页上看到关于一些状态机的论述，才意识到状态机理论是他的系列理论的基础。Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他的初衷恰恰就是为了探讨分布式状态机。摘录一段[3]：
 
-为什么用状态机描述不同的计算？按照Lamport的观点，包括：
+> A **distributed system** can be described as a particular **sequential state machine** that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
+>
+> This is my most often cited paper. Many computer scientists claim to have read it. **But I have rarely encountered anyone who was aware that the paper said anything about state machines.** People seem to think that it is about either the causality relation on events in a distributed system, or the distributed mutual exclusion problem. People have insisted that there is nothing about state machines in the paper. I've even had to go back and reread it to convince myself that I really did remember what I had written. 
+
+
+
+状态机贯穿了Lamport的大量研究。例如，“Time, Clocks"一文就是在写状态机的基础；Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；Lamport 近年来集中精力推广形式化验证( TLA+)是基于状态机模型；"Distributed Snapshot"一文的正确性推导也基于状态机理论。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式计算，描述成了一个串行化状态机(**sequential state machine**)**。
+
+为什么要用状态机描述来不同的计算？按照Lamport的观点，包括：
 
 1) 大部分计算都可以用状态机来描述，无论是一段代码、一个分布式算法还是图灵机，也不论是用何种语言来描述的；
 
-2) 状态机的本质是数学，且只使用了简单的数学模型(集合、逻辑运算等)，通过数学更容易看到问题的本质，发现共通的东西，而很多时候我们沉迷于某种语言的特点，而忽视了问题的本身。注意，这里并不是说实现不重要，而是说在讨论原理性、正确性问题时，更需要用数学方法，在解决原理性问题后，具体语言和实现的方式就变得很重要。
-
-Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他的初衷恰恰就是为了探讨分布式状态机。摘录一段[3]：
-
-> A distributed system can be described as a particular **sequential state machine** that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
->
->This is my most often cited paper. Many computer scientists claim to have read it. **But I have rarely encountered anyone who was aware that the paper said anything about state machines.** People seem to think that it is about either the causality relation on events in a distributed system, or the distributed mutual exclusion problem. People have insisted that there is nothing about state machines in the paper. I've even had to go back and reread it to convince myself that I really did remember what I had written. 
+2) 状态机的本质是数学，且只使用了简单的数学模型(集合、逻辑运算等)，通过数学更容易看到问题的本质，发现共通的东西。很多时候我们沉迷于某种编程语言的特点，而忽视了问题的本身。注意，这里并不是说实现不重要，而是说在讨论原理性、正确性问题时，更需要用数学方法，在解决原理性问题后，具体语言和实现的方式就变得很重要。
 
 
 
@@ -26,11 +28,9 @@ Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用�
 
 
 
-
-
 # 2. 计算和状态机
 
-**简单来说**：一个计算过程可以看成一系列的状态变化/步骤，称为一个行为(Behavior)。一个状态机由初始状态集合和行为集合构成。分布式系统也可以看出一个计算或者一个状态机，只不过是由多个节点/进程实现的。
+**简单来说**：一次计算过程可以看成一系列的状态变化，称为一个行为(Behavior)。一个状态机由初始状态集合和行为集合构成。分布式系统也可以看成一个状态机，只不过是由多个节点/进程实现的。
 
 **形式化描述**：状态机可以从以下几个方面来描述：状态集合 $ \mathcal{S}$ ，初始状态集合 $ \mathcal{L}$ 和$ \mathcal{S}$ 上的Next-State  关系 $ \mathcal{N}$ 。其中 $ \mathcal{L} \subseteq  \mathcal{S}$ ，  $ \mathcal{N} \subseteq  \mathcal{S} \times \mathcal{S}$ 。  它产生各种行为，每个行为可以表示成 $s_1 \rightarrow s_2 \rightarrow s_3...$ 的形式，并且满足：
 $$
@@ -45,29 +45,29 @@ $$
 
 简单来说，可以把 $ \mathcal{N}$ 理解成输入和输出都属于$ \mathcal{S}$ 的动作。
 
-总之，按照Lamport的观点，**计算/行为才是本质，而不是语言或者形式**。
+**计算/行为才是本质，而不是语言或者形式**。
 
 
 
 # 3. 如何把整个分布式计算看成一个状态机？
 
-Behavior 分为有限和无限的，通常讨论的计算行为都是有限的，都会正常结束或者死锁。但是有些行为是无限的，比如一台冯诺依曼计算机，把它看成个状态机，则状态可以认为是无限的。
+计算行为可以分为有限的和无限的两种，通常讨论的计算行为都是有限的，都会正常结束或者死锁。但是有些行为是无限的，比如一台冯诺依曼计算机，把它看成个状态机，则状态可以认为是无限的。
 
 ## 3.1 状态机行为的串行性 vs 分布式计算的并行性
 
-虽然状态机的行为是个集合，即允许有很多种行为，但是在每一次运行过程，是按照某一个Bahavior 中的状态序列在一步一步顺序变化的。但是如果考虑一个多节点的分布式计算，多个节点是可以并行执行的，是否可以对应到串行化的状态机行为上？
+虽然状态机的行为是个集合，即允许有很多种行为，但是在每一次运行过程，是按照某一个行为状态序列一步步顺序变化的。但是如果考虑一个多节点的分布式计算过程，多个节点是可以并行执行的，一个分布式计算行为，如何对应到串行化的状态机行为上？
 
-简单来说，分布式计算中，只有少数 event 之间是真的有因果关系的(Partial Order，有时称为偏序/部分有序)，且是确定的。而大部分事件间的顺序并不重要(即使在物理上确实有先后)，在保持因果关系的前提下，可以把所有的 event 看成一个顺序化的序列，相当于给所有的 event 做了个排序，这个顺序被称为Total Order。
+简单来说，分布式计算中，只有少数 event 之间是真的有因果关系的(Partial Order/偏序关系)，且是确定的。而大部分event间的顺序并不重要(即使在物理上确实有先后)，在保持因果关系的前提下，把无因果关系的event顺序化后，整个运算过程就可以看成一个串行的序列。这也相当于给所有的 event 做了个排序，这个顺序被称为Total Order。
 
 
 
 ## 3.2 如何把分布式系统变成串行的状态机？ 
 
-狭义相对论告诉我们，不存在一个不变的时空中事件的总顺序，不同的观察者可能就两个事件谁先发生产生分歧。但是部分顺序是存在的，对于有因果关系的事件，不同观察者观察到的顺序都相同。
+狭义相对论说，不存在一个不变的时空中事件的总顺序，不同的观察者可能就两个事件谁先发生产生分歧。但是部分顺序是存在的，对于有因果关系的事件，不同观察者观察到的顺序都相同。
 
-事实上，从狭义相对论的角度，发生在不同地点的两个事件，同时性是相对的，会因惯性参考系的不同而不同。在某个观察者看来是同时发生的事件，对另一个作相对运动的观察者来说也许不是同时发生的；反之亦然。不同观测者看到的无因果关系的事件间顺序可能是不同的。但是对于任何观察者来说，**时间不会倒流，因果关系不会颠倒**。
+事实上，从狭义相对论的角度，发生在不同地点的两个事件，同时性是相对的，会因惯性参考系的不同而不同。在某个观察者看来是同时发生的事件，对另一个作相对运动的观察者来说也许不是同时发生的；反之亦然。不同观测者看到的无因果关系的事件间顺序可能是不同的。但是对于任何观察者来说，**时间不会倒流，因果关系不会被颠倒**。
 
-具有因果关系的各个事件间本来就是串行的，在保持因果关系的前提下，把其他**无因果关系的事件按照任意顺序排序**，都可以变成一个**全序(即全部有序)**，这个全序就可以对应到一个行为。一个部分序对应的全序可能有多种，但是它们执行的结果是相同的。
+具有因果关系的各个事件间本来就是串行的，在保持因果序的前提下，把其他**无因果关系的事件按照任意顺序排序**，即可以变成一个**全序(即全部有序)**，这个全序就可以对应到一个行为。一个因果序对应的全序可能有多种。
 
 ### 3.2.1 举个生活中的例子
 
@@ -76,11 +76,11 @@ Behavior 分为有限和无限的，通常讨论的计算行为都是有限的�
 假设短视频包括的画面如下：
 
 1. 小明和小华早起后各自刷牙洗脸、下楼(假设他们住在不同的房子里，不用抢洗手间)；
-2. 小明和小华一起坐西郊观光线去香山公园；
-3. 他们一起在公园门口各买了一个山东煎饼；
-4. 他们在香炉峰、双清别墅各自拍照；
-6. 他们一起坐西郊观光线回家；
-7. 他们回家后各自发朋友圈。
+2. 两人一起坐西郊观光线去香山公园；
+3. 两人在公园门口各买了一个山东煎饼；
+4. 两人在香炉峰、双清别墅各自拍照；
+6. 两人一起坐西郊观光线回家；
+7. 两人回家后各自发朋友圈。
 
 如果不考虑倒叙，部分画面的顺序是不能调整的，而部分是可以的。比如： 
 
@@ -108,7 +108,7 @@ Partial order (偏序关系)具**有非对称、传递性和反自反性**。
 为什么有些画面不能调整顺序？因为有偏序关系，包括两种：
 
 - **每个人自己完成的事情间的顺序**，比如，小明先刷牙后洗脸，然后打电话约小华，游览完成才发朋友圈。如果纪录片中小明先发了在公园玩朋友圈，后坐车去公园，就穿帮了。
-- **交互或传递性引起的因果关系**。不同的人，所做的事情间有些也有顺序，这些顺序是因为他们之间的某种**交互**引起的。比如，小明跟小华一起坐车去公园这一刻，就是一个明确的时间点，它让二者之间建立了一个交互，小明在公园拍照，不可能在小华刷牙之前，因为二者一起坐车去的公园。 ""小华刷牙"" $\rightarrow$  "二人坐车去公园" $\rightarrow$ "小明在公园拍照"。所以有 ""小华刷牙"   $\rightarrow$  "小明在公园拍照""。在分布式系统中，**交互一般是消息传递**。
+- **交互或传递性引起的因果关系**。不同的人，所做的事情间有些也有因果关系，这是因为他们之间的某种**交互**引起的。比如，小明跟小华一起坐车去公园这一刻，就是一个明确的时间点，它让二者之间建立了一个交互，小明在公园拍照，不可能在小华刷牙之前，因为二者一起坐车去的公园。如果我们用箭头$\rightarrow$ 表示因果关系，那么有 "小华刷牙" $\rightarrow$  "二人坐车去公园" $\rightarrow$ "小明在公园拍照"。所以有 ""小华刷牙"   $\rightarrow$  "小明在公园拍照""。在分布式系统中，**交互一般是消息传递**。
 
   
 
