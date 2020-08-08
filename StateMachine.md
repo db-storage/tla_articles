@@ -4,7 +4,7 @@
 
 本文把Lamport关于状态机的几篇文章串起来，以及这些文章间的关系。包括如何把分布式计算中并发的 event 顺序化(Total Ordering )并用状态机描述[1]；然后介绍下基于状态机和不变式的强归纳法证明[2]。
 
-状态机贯穿了Lamport的大量研究。例如，“Time, Clocks"一文就是在写状态机(见下文)；Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；Lamport 近年来集中精力做的 TLA+的形式化验证是基于状态机模型；"Distributed Snapshot"一文的有效性证明也基于状态机。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式计算，描述成了一个串行化状态机(**sequential state machine**)**。
+状态机贯穿了Lamport的大量研究。例如，“Time, Clocks"一文就是在写状态机(见下文)；Paxos/FastPaxos的归纳法推导基于状态机、不变式和强归纳法；Lamport 近年来集中精力推广形式化验证( TLA+)是基于状态机模型；"Distributed Snapshot"一文的有效性证明也基于状态机。但是大部分读者都忽略了状态机的重要性，更没有注意到，Lamport的分布式理论的基础，就是把**整个分布式计算，描述成了一个串行化状态机(**sequential state machine**)**。
 
 为什么用状态机描述不同的计算？按照Lamport的观点，包括：
 
@@ -152,7 +152,7 @@ $$
 
 
 
-## 4.2 例子
+## 4.2 一个简单的例子
 
 https://surfingcomplexity.blog/2018/12/27/inductive-invariants/
 
@@ -161,6 +161,60 @@ https://www.microsoft.com/en-us/research/publication/teaching-concurrency/
 
 
 https://www.cs.rice.edu/~sc40/COMP382/Lectures/week5tutorial.txt
+
+
+
+Euclid的求最大公约数方法为例。GCD 实现的不变式 [来自这里](https://tla.msr-inria.inria.fr/tlaps/content/Documentation/Tutorial/The_example.html)
+
+
+$$
+\begin{split}
+&EXTENDS Integer\\
+&p | q \triangleq \exists d \in 1..q : q = p * d\\
+&Divisors(q) \triangleq {d \in 1..q : d | q}\\
+&Maximum(S) \triangleq CHOOSE \quad x \in S : \forall y \in S : x >= y\\
+&GCD(p,q) \triangleq Maximum(Divisors(p) \cap Divisors(q))\\
+&Number \triangleq Nat 	\setminus {0}\\
+&CONSTANTS \quad M, N \\
+&VARIABLES \quad x, y \\
+&Init \triangleq (x = M) \land (y = N) \\
+&Next \triangleq \\ 
+&\lor \quad \land x < y \\
+&  \qquad \land y' = y - x\\
+&  \qquad \land x' = x\\
+&   \or \quad \and y < x\\
+&  \qquad \land  x' = x - y\\
+&  \qquad \land y' = y\\
+&Spec \triangleq Init \land \Box [Next]_<x,y>\\
+&ResultCorrect \triangleq (x = y) => x = GCD(M, N)\\
+&THEOREM Correctness \triangleq Spec => \Box ResultCorrect\\
+\end{split}
+$$
+
+
+
+
+$Inv \triangleq GCD(a,b) = GCD(x,y) $
+
+1） $Init \implies Inv$
+
+2) $Inv \land Next \implies Inv$
+
+
+
+
+
+1) Init时，$x=M \land y = N$, $Inv$ 显然成立；
+
+2) 假设当前的 状态满足Inv，那么$\exists g: g \in a=m \times g, b = n \times g$。如果$x>y$，那么 $x'=x-y=(m-n)\times g$，所以 $x'|g \land y|g$ 成立。
+
+如果g不是$GCD(x', y)$，即$\exist h: h>g \land x'|h \land y|h$，那么可以反证得出，$x|h \land y|h$，与$GCD(x,y) = g$ 矛盾。
+
+所以，Inv是Euclid计算过程的 不变式。
+
+
+
+
 
 ## 4.3 在Paxos正确性证明中的应用
 
