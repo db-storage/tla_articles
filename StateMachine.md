@@ -10,9 +10,9 @@
 
 1) 大部分计算都可以用状态机来描述，无论是一段代码、一个分布式算法还是图灵机，也不论是用何种语言来描述的；
 
-2) 状态机的本质是数学，且只使用了简单的数学模型(集合、逻辑运算等)，通过数学更容易看到问题的本质，发现共通的东西，而大部分人沉迷于某种语言的特点，而忽视了问题的本身。注意，这里并不是说实现不重要，而是说在讨论原理性、正确性问题时，更需要用数学方法，在解决原理性问题后，具体语言和实现的方式就变得很重要。
+2) 状态机的本质是数学，且只使用了简单的数学模型(集合、逻辑运算等)，通过数学更容易看到问题的本质，发现共通的东西，而很多时候我们沉迷于某种语言的特点，而忽视了问题的本身。注意，这里并不是说实现不重要，而是说在讨论原理性、正确性问题时，更需要用数学方法，在解决原理性问题后，具体语言和实现的方式就变得很重要。
 
-Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他写此文恰恰就是为了探讨分布式状态机。摘录一段[来自这里](http://lamport.azurewebsites.net/pubs/pubs.html#time-clocks)：
+Lamport在自己的主页上说，"Time, Clocks" [1]是他的文章中被引用最多的一篇，但是**他几乎没遇到谁明白这篇文章是在写状态机**，而他的初衷恰恰就是为了探讨分布式状态机。摘录一段[3]：
 
 > A distributed system can be described as a particular **sequential state machine** that is implemented with a network of processors. The ability to totally order the input requests leads immediately to an algorithm to implement an arbitrary state machine by a network of processors, and hence to implement any distributed system. So, **I wrote this paper, which is about how to implement an arbitrary distributed state machine.** As an illustration, I used the simplest example of a distributed system I could think of--a distributed mutual exclusion algorithm. 
 >
@@ -164,12 +164,12 @@ https://www.cs.rice.edu/~sc40/COMP382/Lectures/week5tutorial.txt
 
 
 
-Euclid的求最大公约数方法为例。GCD 实现的不变式 [来自这里](https://tla.msr-inria.inria.fr/tlaps/content/Documentation/Tutorial/The_example.html)
+Euclid的求最大公约数方法为例。GCD 实现的形式化验证spec如下([来自这里](https://tla.msr-inria.inria.fr/tlaps/content/Documentation/Tutorial/The_example.html))
 
 
 $$
 \begin{split}
-&EXTENDS Integer\\
+&EXTENDS \quad Integer\\
 &p | q \triangleq \exists d \in 1..q : q = p * d\\
 &Divisors(q) \triangleq {d \in 1..q : d | q}\\
 &Maximum(S) \triangleq CHOOSE \quad x \in S : \forall y \in S : x >= y\\
@@ -192,27 +192,19 @@ $$
 $$
 
 
-
-
-$Inv \triangleq GCD(a,b) = GCD(x,y) $
+对于上面的算法，不变式是：$Inv \triangleq GCD(M,N) = GCD(x,y) $。按照归纳法，基本过程是：
 
 1） $Init \implies Inv$
 
+由于Init时，$x=M \land y = N$, $Inv$ 显然成立；
+
 2) $Inv \land Next \implies Inv$
 
+假设当前状态满足Inv，即 $\exists g \in Numbers:  a=m \times g \land b = n \times g$。
 
+如果$x>y$，那么 $x'=x-y=(m-n)\times g$，所以 $x'|g \land y|g$ 成立。如果g不是$GCD(x', y)$，即$\exist h \in Numbers: h>g \land x'|h \land y|h$，那么根据$x'= x-y$ 可以得出，$x|h \land y|h$，与$GCD(x,y) = g$ 矛盾。所以，$GCD(x',y) = GCD(x,y) =GCD(M, N)$，所以新状态仍然满足$Inv$。
 
-
-
-1) Init时，$x=M \land y = N$, $Inv$ 显然成立；
-
-2) 假设当前的 状态满足Inv，那么$\exists g: g \in a=m \times g, b = n \times g$。如果$x>y$，那么 $x'=x-y=(m-n)\times g$，所以 $x'|g \land y|g$ 成立。
-
-如果g不是$GCD(x', y)$，即$\exist h: h>g \land x'|h \land y|h$，那么可以反证得出，$x|h \land y|h$，与$GCD(x,y) = g$ 矛盾。
-
-所以，Inv是Euclid计算过程的 不变式。
-
-
+$y>x$与$x>y$ 实际上是相同的。
 
 
 
@@ -246,5 +238,7 @@ $Inv \triangleq GCD(a,b) = GCD(x,y) $
 
 [1]  **Time, Clocks and the Ordering of Events in a Distributed System**, Lamport, *Communications of the ACM 21*, 7  (July 1978), 558-565
 
-[2]**Computation and State Machines**,  https://lamport.azurewebsites.net/pubs/state-machine.pdf
+[2] **Computation and State Machines**,  https://lamport.azurewebsites.net/pubs/state-machine.pdf
+
+[3] Lamport个人主页：https://lamport.azurewebsites.net/pubs/pubs.html
 
